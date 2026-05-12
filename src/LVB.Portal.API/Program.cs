@@ -150,29 +150,109 @@ builder.Services.AddSwaggerGen(c =>
 // ── Build App ─────────────────────────────────────────────────────────────────
 var app = builder.Build();
 
-// Auto-migrate on startup
+// ── Auto-migrate + Seed ───────────────────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var db  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var pwd = scope.ServiceProvider.GetRequiredService<LVB.Portal.Infrastructure.Services.PasswordService>();
+
     await db.Database.MigrateAsync();
 
-    // Seed default admin user nếu chưa có
+    // ── 1. Seed Departments ──────────────────────────────────────────────────
+    var departments = new[]
+    {
+        new LVB.Portal.Domain.Entities.Department { Code = "IT",   Name = "Phòng IT",                 IsActive = true, CreatedAt = DateTime.UtcNow },
+        new LVB.Portal.Domain.Entities.Department { Code = "HD",   Name = "Phòng Huy động",           IsActive = true, CreatedAt = DateTime.UtcNow },
+        new LVB.Portal.Domain.Entities.Department { Code = "CV",   Name = "Phòng Cho vay",            IsActive = true, CreatedAt = DateTime.UtcNow },
+        new LVB.Portal.Domain.Entities.Department { Code = "NHDT", Name = "Phòng Ngân hàng điện tử",  IsActive = true, CreatedAt = DateTime.UtcNow },
+        new LVB.Portal.Domain.Entities.Department { Code = "TTQT", Name = "Phòng Thanh toán quốc tế", IsActive = true, CreatedAt = DateTime.UtcNow },
+        new LVB.Portal.Domain.Entities.Department { Code = "THE",  Name = "Phòng Thẻ",                IsActive = true, CreatedAt = DateTime.UtcNow },
+    };
+    foreach (var dept in departments)
+    {
+        if (!db.Departments.Any(d => d.Code == dept.Code))
+        {
+            db.Departments.Add(dept);
+            Log.Information("Seeding department: {Code} – {Name}", dept.Code, dept.Name);
+        }
+    }
+    await db.SaveChangesAsync();
+
+    // ── 2. Seed Sheet → Table Mappings ───────────────────────────────────────
+    var mappings = new[]
+    {
+        new LVB.Portal.Domain.Entities.SheetTableMapping
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111101"),
+            SheetName = "Huy động/Cho vay", TableName = "huy_dong_cho_vay",
+            DepartmentCode = "",
+            ColumnMappingJson = """{"NGAY_SO_LIEU":"ngay_so_lieu","MA_DON_VI":"ma_don_vi","MA_KHACH_HANG":"ma_khach_hang","TEN_KHACH_HANG":"ten_khach_hang","LOAI_KH":"loai_kh","SO_TAI_KHOAN":"so_tai_khoan","LOAI_TIEN":"loai_tien","SO_DU_QUY_DOI":"so_du_quy_doi","SO_DU_BQ_THANG":"so_du_bq_thang","MA_CIF_CBNV 1":"ma_cif_cbnv1","MA_CIF_CBNV2":"ma_cif_cbnv2"}""",
+            IsActive = true, CreatedAt = DateTime.UtcNow
+        },
+        new LVB.Portal.Domain.Entities.SheetTableMapping
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111102"),
+            SheetName = "Ngân hàng điện tử", TableName = "ngan_hang_dien_tu",
+            DepartmentCode = "",
+            ColumnMappingJson = """{"MA_DON_VI":"ma_don_vi","MA_KHACH_HANG":"ma_khach_hang","Tên KH":"ten_kh","SO_TAI_KHOAN":"so_tai_khoan","MA_CIF_CBNV":"ma_cif_cbnv","Loại chỉ tiêu":"loai_chi_tieu","NGAY_SO_LIEU":"ngay_so_lieu","DS_THUC_HIEN":"ds_thuc_hien","THU  NHAP":"thu_nhap"}""",
+            IsActive = true, CreatedAt = DateTime.UtcNow
+        },
+        new LVB.Portal.Domain.Entities.SheetTableMapping
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111103"),
+            SheetName = "Mở CIF mới", TableName = "mo_cif_moi",
+            DepartmentCode = "",
+            ColumnMappingJson = """{"MA_DON_VI":"ma_don_vi","MA_KHACH_HANG":"ma_khach_hang","Tên KH":"ten_kh","Loai_KH":"loai_kh","MA_CIF_CBNV":"ma_cif_cbnv","NGAY_MO_CIF":"ngay_mo_cif","MA_CIF_GT":"ma_cif_gt","MA_CIF_QL":"ma_cif_ql"}""",
+            IsActive = true, CreatedAt = DateTime.UtcNow
+        },
+        new LVB.Portal.Domain.Entities.SheetTableMapping
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111104"),
+            SheetName = "Thu nhập ròng dịch vụ", TableName = "thu_nhap_rong_dich_vu",
+            DepartmentCode = "",
+            ColumnMappingJson = """{"MA_DON_VI":"ma_don_vi","MA_KHACH_HANG":"ma_khach_hang","Tên KH":"ten_kh","SO_TAI_KHOAN":"so_tai_khoan","MA_CIF_CBNV":"ma_cif_cbnv","NGAY_SO_LIEU":"ngay_so_lieu","DS_THUC_HIEN":"ds_thuc_hien","THU  NHAP":"thu_nhap"}""",
+            IsActive = true, CreatedAt = DateTime.UtcNow
+        },
+        new LVB.Portal.Domain.Entities.SheetTableMapping
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111105"),
+            SheetName = "Thanh toán quốc tế", TableName = "thanh_toan_quoc_te",
+            DepartmentCode = "",
+            ColumnMappingJson = """{"MA_DON_VI":"ma_don_vi","MA_KHACH_HANG":"ma_khach_hang","Tên KH":"ten_kh","SO_TAI_KHOAN":"so_tai_khoan","MA_CIF_CBNV":"ma_cif_cbnv","DS_THUC_HIEN":"ds_thuc_hien","LOAI_TIEN":"loai_tien","TY_GIA":"ty_gia","THU NHAP":"thu_nhap"}""",
+            IsActive = true, CreatedAt = DateTime.UtcNow
+        },
+        new LVB.Portal.Domain.Entities.SheetTableMapping
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111106"),
+            SheetName = "Phát hành thẻ", TableName = "phat_hanh_the",
+            DepartmentCode = "",
+            ColumnMappingJson = """{"MA_DON_VI":"ma_don_vi","MA_KHACH_HANG":"ma_khach_hang","Tên KH":"ten_kh","SO_TAI_KHOAN":"so_tai_khoan","MA_CIF_CBNV":"ma_cif_cbnv","NGAY_PHAT_HANH":"ngay_phat_hanh","Loại thẻ":"loai_the","Số lượng":"so_luong"}""",
+            IsActive = true, CreatedAt = DateTime.UtcNow
+        },
+    };
+    foreach (var m in mappings)
+    {
+        if (!db.SheetTableMappings.Any(x => x.Id == m.Id))
+        {
+            db.SheetTableMappings.Add(m);
+            Log.Information("Seeding sheet mapping: {Sheet} → {Table}", m.SheetName, m.TableName);
+        }
+    }
+    await db.SaveChangesAsync();
+
+    // ── 3. Seed Admin User ───────────────────────────────────────────────────
     if (!db.Users.Any(u => u.Username == "admin"))
     {
-        var pwdSvc = scope.ServiceProvider.GetRequiredService<LVB.Portal.Infrastructure.Services.PasswordService>();
-        // Ensure admin department exists
-        if (!db.Departments.Any(d => d.Code == "IT"))
-            db.Departments.Add(new LVB.Portal.Domain.Entities.Department { Code = "IT", Name = "Phòng IT", IsActive = true, CreatedAt = DateTime.UtcNow });
         db.Users.Add(new LVB.Portal.Domain.Entities.User
         {
-            Username = "admin",
-            FullName = "System Administrator",
-            Email = "admin@lvbank.com",
-            PasswordHash = pwdSvc.HashPassword("Admin@2024!"),
-            Role = LVB.Portal.Domain.Enums.UserRole.SystemAdmin,
+            Username     = "admin",
+            FullName     = "System Administrator",
+            Email        = "admin@lvbank.com",
+            PasswordHash = pwd.HashPassword("Admin@2024!"),
+            Role         = LVB.Portal.Domain.Enums.UserRole.SystemAdmin,
             DepartmentCode = "IT",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            IsActive     = true,
+            CreatedAt    = DateTime.UtcNow
         });
         await db.SaveChangesAsync();
         Log.Information("Default admin user created: admin / Admin@2024!");

@@ -158,28 +158,8 @@ namespace LVB.Portal.Infrastructure.Data.Migrations
             migrationBuilder.CreateIndex(name: "ix_upload_sessions_uploaded_by", table: "upload_sessions", column: "uploaded_by");
             migrationBuilder.CreateIndex(name: "ix_upload_sheet_results_upload_session_id", table: "upload_sheet_results", column: "upload_session_id");
 
-            // Seed Departments
-            migrationBuilder.InsertData("departments", new[] { "code", "name", "is_active", "created_at" }, new object[,]
-            {
-                { "HD", "Phòng Huy động", true, DateTime.UtcNow },
-                { "CV", "Phòng Cho vay", true, DateTime.UtcNow },
-                { "NHDT", "Phòng Ngân hàng điện tử", true, DateTime.UtcNow },
-                { "TTQT", "Phòng Thanh toán quốc tế", true, DateTime.UtcNow },
-                { "THE", "Phòng Thẻ", true, DateTime.UtcNow }
-            });
-
-            // Seed Sheet Mappings
-            migrationBuilder.InsertData("sheet_table_mappings",
-                new[] { "id", "sheet_name", "table_name", "department_code", "column_mapping_json", "is_active", "created_at" },
-                new object[,]
-                {
-                    { Guid.Parse("11111111-1111-1111-1111-111111111101"), "Huy động/Cho vay", "huy_dong_cho_vay", "", @"{""NGAY_SO_LIEU"":""ngay_so_lieu"",""MA_DON_VI"":""ma_don_vi"",""MA_KHACH_HANG"":""ma_khach_hang"",""TEN_KHACH_HANG"":""ten_khach_hang"",""LOAI_KH"":""loai_kh"",""SO_TAI_KHOAN"":""so_tai_khoan"",""LOAI_TIEN"":""loai_tien"",""SO_DU_QUY_DOI"":""so_du_quy_doi"",""SO_DU_BQ_THANG"":""so_du_bq_thang"",""MA_CIF_CBNV 1"":""ma_cif_cbnv1"",""MA_CIF_CBNV2"":""ma_cif_cbnv2""}", true, DateTime.UtcNow },
-                    { Guid.Parse("11111111-1111-1111-1111-111111111102"), "Ngân hàng điện tử", "ngan_hang_dien_tu", "", @"{""MA_DON_VI"":""ma_don_vi"",""MA_KHACH_HANG"":""ma_khach_hang"",""Tên KH"":""ten_kh"",""SO_TAI_KHOAN"":""so_tai_khoan"",""MA_CIF_CBNV"":""ma_cif_cbnv"",""Loại chỉ tiêu"":""loai_chi_tieu"",""NGAY_SO_LIEU"":""ngay_so_lieu"",""DS_THUC_HIEN"":""ds_thuc_hien"",""THU  NHAP"":""thu_nhap""}", true, DateTime.UtcNow },
-                    { Guid.Parse("11111111-1111-1111-1111-111111111103"), "Mở CIF mới", "mo_cif_moi", "", @"{""MA_DON_VI"":""ma_don_vi"",""MA_KHACH_HANG"":""ma_khach_hang"",""Tên KH"":""ten_kh"",""Loai_KH"":""loai_kh"",""MA_CIF_CBNV"":""ma_cif_cbnv"",""NGAY_MO_CIF"":""ngay_mo_cif"",""MA_CIF_GT"":""ma_cif_gt"",""MA_CIF_QL"":""ma_cif_ql""}", true, DateTime.UtcNow },
-                    { Guid.Parse("11111111-1111-1111-1111-111111111104"), "Thu nhập ròng dịch vụ", "thu_nhap_rong_dich_vu", "", @"{""MA_DON_VI"":""ma_don_vi"",""MA_KHACH_HANG"":""ma_khach_hang"",""Tên KH"":""ten_kh"",""SO_TAI_KHOAN"":""so_tai_khoan"",""MA_CIF_CBNV"":""ma_cif_cbnv"",""NGAY_SO_LIEU"":""ngay_so_lieu"",""DS_THUC_HIEN"":""ds_thuc_hien"",""THU  NHAP"":""thu_nhap""}", true, DateTime.UtcNow },
-                    { Guid.Parse("11111111-1111-1111-1111-111111111105"), "Thanh toán quốc tế", "thanh_toan_quoc_te", "", @"{""MA_DON_VI"":""ma_don_vi"",""MA_KHACH_HANG"":""ma_khach_hang"",""Tên KH"":""ten_kh"",""SO_TAI_KHOAN"":""so_tai_khoan"",""MA_CIF_CBNV"":""ma_cif_cbnv"",""DS_THUC_HIEN"":""ds_thuc_hien"",""LOAI_TIEN"":""loai_tien"",""TY_GIA"":""ty_gia"",""THU NHAP"":""thu_nhap""}", true, DateTime.UtcNow },
-                    { Guid.Parse("11111111-1111-1111-1111-111111111106"), "Phát hành thẻ", "phat_hanh_the", "", @"{""MA_DON_VI"":""ma_don_vi"",""MA_KHACH_HANG"":""ma_khach_hang"",""Tên KH"":""ten_kh"",""SO_TAI_KHOAN"":""so_tai_khoan"",""MA_CIF_CBNV"":""ma_cif_cbnv"",""NGAY_PHAT_HANH"":""ngay_phat_hanh"",""Loại thẻ"":""loai_the"",""Số lượng"":""so_luong""}", true, DateTime.UtcNow }
-                });
+            // Note: seed data (departments, sheet mappings, admin user)
+            // is handled in Program.cs startup to run on every deploy.
         }
 
         /// <inheritdoc />
