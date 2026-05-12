@@ -156,40 +156,14 @@ using (var scope = app.Services.CreateScope())
     var db  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var pwd = scope.ServiceProvider.GetRequiredService<LVB.Portal.Infrastructure.Services.PasswordService>();
 
-    // Migrate (có thể skip nếu migration đã trong history)
-    try
-    {
-        await db.Database.MigrateAsync();
-        Log.Information("Database migration completed.");
-    }
-    catch (Exception ex)
-    {
-        Log.Warning(ex, "MigrateAsync threw exception – will check schema manually.");
-    }
+    // Luôn chạy EnsureSchemaAsync trước – dùng IF NOT EXISTS nên an toàn
+    // kể cả khi bảng đã tồn tại. Sau đó mới chạy MigrateAsync để sync history.
+    Log.Information("Ensuring database schema...");
+    await EnsureSchemaAsync(db);
+    Log.Information("Schema ready.");
 
-    // Kiểm tra bảng 'departments' có thực sự tồn tại không
-    // (migration bị skip khi history có entry nhưng bảng chưa được tạo)
-    var conn = db.Database.GetDbConnection();
-    if (conn.State != System.Data.ConnectionState.Open)
-        await conn.OpenAsync();
-
-    int deptTableCount;
-    using (var cmd = conn.CreateCommand())
-    {
-        cmd.CommandText = """
-            SELECT COUNT(*)::int
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-              AND table_name   = 'departments'
-            """;
-        deptTableCount = (int)(await cmd.ExecuteScalarAsync() ?? 0);
-    }
-
-    if (deptTableCount == 0)
-    {
-        Log.Warning("Schema not found after migration – running raw SQL fallback.");
-        await EnsureSchemaAsync(db);
-    }
+    try { await db.Database.MigrateAsync(); }
+    catch (Exception ex) { Log.Warning(ex, "MigrateAsync skipped or failed (non-fatal)."); }
 
     // ── 1. Seed Departments ──────────────────────────────────────────────────
     var departments = new[]
