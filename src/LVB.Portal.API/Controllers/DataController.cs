@@ -28,7 +28,12 @@ public class DataController : ControllerBase
         foreach (var dept in depts)
         {
             var tables = await _dataService.GetAvailableTablesAsync(dept.Code);
-            result.Add(new { dept.Code, dept.Name, Tables = tables });
+            result.Add(new
+            {
+                dept.Code,
+                dept.Name,
+                Tables = tables.Select(t => new { t.TableName, t.SheetName })
+            });
         }
         return Ok(result);
     }

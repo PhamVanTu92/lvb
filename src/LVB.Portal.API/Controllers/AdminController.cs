@@ -132,6 +132,61 @@ public class AdminController : ControllerBase
         return CreatedAtAction(nameof(GetDepartments), dept);
     }
 
+    // ─── Sheet-Table Mappings (Dataset registry) ───────────────────────
+
+    /// <summary>Danh sách dataset mappings</summary>
+    [HttpGet("sheet-mappings")]
+    public async Task<IActionResult> GetSheetMappings() =>
+        Ok(await _db.SheetTableMappings.OrderBy(m => m.SheetName).ToListAsync());
+
+    /// <summary>Tạo dataset mapping mới</summary>
+    [HttpPost("sheet-mappings")]
+    public async Task<IActionResult> CreateSheetMapping([FromBody] SheetMappingRequest request)
+    {
+        if (await _db.SheetTableMappings.AnyAsync(m => m.TableName == request.TableName && m.DepartmentCode == request.DepartmentCode))
+            return Conflict(new { message = "Tên bảng đã được đăng ký cho phòng ban này" });
+
+        var dept = await _db.Departments.FindAsync(request.DepartmentCode);
+        if (dept == null) return BadRequest(new { message = "Phòng ban không tồn tại" });
+
+        var mapping = new LVB.Portal.Domain.Entities.SheetTableMapping
+        {
+            SheetName = request.SheetName,
+            TableName = request.TableName.ToLowerInvariant().Replace(' ', '_'),
+            DepartmentCode = request.DepartmentCode,
+            ColumnMappingJson = request.ColumnMappingJson ?? "{}",
+            IsActive = true
+        };
+        _db.SheetTableMappings.Add(mapping);
+        await _db.SaveChangesAsync();
+        return Ok(mapping);
+    }
+
+    /// <summary>Cập nhật dataset mapping</summary>
+    [HttpPut("sheet-mappings/{id:guid}")]
+    public async Task<IActionResult> UpdateSheetMapping(Guid id, [FromBody] SheetMappingRequest request)
+    {
+        var mapping = await _db.SheetTableMappings.FindAsync(id);
+        if (mapping == null) return NotFound();
+
+        mapping.SheetName = request.SheetName;
+        mapping.ColumnMappingJson = request.ColumnMappingJson ?? mapping.ColumnMappingJson;
+        mapping.IsActive = request.IsActive ?? mapping.IsActive;
+        await _db.SaveChangesAsync();
+        return Ok(mapping);
+    }
+
+    /// <summary>Xóa dataset mapping</summary>
+    [HttpDelete("sheet-mappings/{id:guid}")]
+    public async Task<IActionResult> DeleteSheetMapping(Guid id)
+    {
+        var mapping = await _db.SheetTableMappings.FindAsync(id);
+        if (mapping == null) return NotFound();
+        _db.SheetTableMappings.Remove(mapping);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
     /// <summary>Tạo API key cho iTitan</summary>
     [HttpPost("api-keys")]
     public async Task<IActionResult> CreateApiKey([FromBody] CreateApiKeyRequest request)
@@ -170,3 +225,10 @@ public record CreateApiKeyRequest(
     [System.ComponentModel.DataAnnotations.Required] string Name,
     string? Description,
     DateTime? ExpiresAt);
+
+public record SheetMappingRequest(
+    [System.ComponentModel.DataAnnotations.Required] string SheetName,
+    [System.ComponentModel.DataAnnotations.Required] string TableName,
+    [System.ComponentModel.DataAnnotations.Required] string DepartmentCode,
+    string? ColumnMappingJson,
+    bool? IsActive);

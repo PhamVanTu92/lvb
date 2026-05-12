@@ -60,8 +60,13 @@ export interface DataTableResult {
   lastUpdated?: string
 }
 
+export interface TableInfo {
+  tableName: string
+  sheetName: string
+}
+
 export interface Department {
   code: string
   name: string
-  tables?: string[]
+  tables?: TableInfo[]
 }

@@ -6,6 +6,17 @@ import { Search, Download, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-r
 
 export default function DataTablePage() {
   const { dept, table } = useParams<{ dept: string; table: string }>()
+
+  // Get Vietnamese name from departments cache
+  const { data: depts } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => dataApi.getDepartments().then(r => r.data),
+    staleTime: 60_000,
+  })
+  const sheetName = depts
+    ?.flatMap(d => d.tables ?? [])
+    .find(t => t.tableName === table)
+    ?.sheetName ?? table?.replace(/_/g, ' ')
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -48,8 +59,8 @@ export default function DataTablePage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 capitalize">
-            {table?.replace(/_/g, ' ')}
+          <h1 className="text-2xl font-bold text-gray-900">
+            {sheetName}
           </h1>
           <p className="text-gray-500 mt-1">
             Phòng: <span className="font-medium">{dept}</span>

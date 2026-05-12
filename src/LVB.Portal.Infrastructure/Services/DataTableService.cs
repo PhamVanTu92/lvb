@@ -17,23 +17,25 @@ public class DataTableService
         _logger = logger;
     }
 
-    public async Task<IEnumerable<string>> GetAvailableTablesAsync(string deptCode)
+    public async Task<IEnumerable<TableInfo>> GetAvailableTablesAsync(string deptCode)
     {
         var mappings = await _db.SheetTableMappings
             .Where(m => m.IsActive && (m.DepartmentCode == deptCode || m.DepartmentCode == ""))
-            .Select(m => m.TableName)
+            .Select(m => new { m.TableName, m.SheetName })
             .Distinct()
             .ToListAsync();
 
         // Filter to only tables that actually exist in the DB
-        var existing = new List<string>();
-        foreach (var table in mappings)
+        var existing = new List<TableInfo>();
+        foreach (var m in mappings)
         {
-            var exists = await TableExistsAsync(table);
-            if (exists) existing.Add(table);
+            if (await TableExistsAsync(m.TableName))
+                existing.Add(new TableInfo(m.TableName, m.SheetName));
         }
         return existing;
     }
+
+    public record TableInfo(string TableName, string SheetName);
 
     public async Task<DataTableResult?> QueryTableAsync(DataTableQueryRequest request)
     {

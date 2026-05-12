@@ -67,14 +67,14 @@ export default function Layout() {
             <div className="pt-2">
               <p className="text-blue-400 text-xs uppercase px-3 py-1">Dữ liệu</p>
               {depts.map(dept =>
-                dept.tables?.map(table => (
+                dept.tables?.map(t => (
                   <NavLink
-                    key={`${dept.code}-${table}`}
-                    to={`/data/${dept.code}/${table}`}
+                    key={`${dept.code}-${t.tableName}`}
+                    to={`/data/${dept.code}/${t.tableName}`}
                     className={navItemClass}
                   >
                     <Table2 size={18} />
-                    <span className="truncate">{table.replace(/_/g, ' ')}</span>
+                    <span className="truncate">{t.sheetName}</span>
                   </NavLink>
                 ))
               )}
