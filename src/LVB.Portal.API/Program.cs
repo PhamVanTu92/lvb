@@ -395,7 +395,7 @@ static async Task EnsureSchemaAsync(AppDbContext db)
         CREATE        INDEX IF NOT EXISTS ix_usr_session    ON upload_sheet_results(upload_session_id);
 
         -- Đánh dấu migration đã chạy
-        INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+        INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
         VALUES ('20240101000000_InitialCreate', '9.0.5')
         ON CONFLICT DO NOTHING;
     """);
