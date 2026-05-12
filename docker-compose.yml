@@ -88,6 +88,7 @@ services:
       - Jwt__ExpiryMinutes=480
       - Upload__MaxFileSizeMB=50
       - Redis__ConnectionString=redis:6379
+      - AllowedOrigins=http://localhost:4000,https://lvb.foxai.com.vn,http://lvb.foxai.com.vn
     ports:
       - "8888:8080"
     depends_on:
