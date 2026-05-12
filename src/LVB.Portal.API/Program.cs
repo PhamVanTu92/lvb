@@ -156,7 +156,17 @@ using (var scope = app.Services.CreateScope())
     var db  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var pwd = scope.ServiceProvider.GetRequiredService<LVB.Portal.Infrastructure.Services.PasswordService>();
 
-    await db.Database.MigrateAsync();
+    // Migrate – nếu lỗi thì log và dùng fallback tạo bảng bằng raw SQL
+    try
+    {
+        await db.Database.MigrateAsync();
+        Log.Information("Database migration completed.");
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "MigrateAsync failed – attempting raw SQL schema creation as fallback.");
+        await EnsureSchemaAsync(db);
+    }
 
     // ── 1. Seed Departments ──────────────────────────────────────────────────
     var departments = new[]
@@ -281,6 +291,120 @@ app.MapControllers();
 app.MapHub<UploadProgressHub>("/hubs/upload-progress");
 
 app.Run();
+
+// Fallback: tạo schema bằng raw SQL nếu EF migration lỗi
+static async Task EnsureSchemaAsync(AppDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS departments (
+            code        VARCHAR(50)  PRIMARY KEY,
+            name        VARCHAR(200) NOT NULL,
+            description TEXT,
+            is_active   BOOLEAN      NOT NULL DEFAULT true,
+            created_at  TIMESTAMPTZ  NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id           UUID         PRIMARY KEY,
+            key_hash     VARCHAR(500) NOT NULL,
+            name         VARCHAR(200) NOT NULL,
+            description  TEXT,
+            is_active    BOOLEAN      NOT NULL DEFAULT true,
+            created_at   TIMESTAMPTZ  NOT NULL,
+            expires_at   TIMESTAMPTZ,
+            last_used_at TIMESTAMPTZ
+        );
+
+        CREATE TABLE IF NOT EXISTS sheet_table_mappings (
+            id                  UUID         PRIMARY KEY,
+            sheet_name          VARCHAR(200) NOT NULL,
+            table_name          VARCHAR(200) NOT NULL,
+            department_code     VARCHAR(50)  NOT NULL,
+            column_mapping_json JSONB        NOT NULL,
+            is_active           BOOLEAN      NOT NULL DEFAULT true,
+            created_at          TIMESTAMPTZ  NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS users (
+            id                  UUID         PRIMARY KEY,
+            username            VARCHAR(100) NOT NULL,
+            full_name           TEXT         NOT NULL,
+            email               VARCHAR(255) NOT NULL,
+            password_hash       TEXT         NOT NULL,
+            role                INTEGER      NOT NULL,
+            department_code     VARCHAR(50)  NOT NULL,
+            is_active           BOOLEAN      NOT NULL DEFAULT true,
+            failed_login_count  INTEGER      NOT NULL DEFAULT 0,
+            locked_until        TIMESTAMPTZ,
+            created_at          TIMESTAMPTZ  NOT NULL,
+            updated_at          TIMESTAMPTZ
+        );
+
+        CREATE TABLE IF NOT EXISTS upload_sessions (
+            id               UUID          PRIMARY KEY,
+            file_name        VARCHAR(500)  NOT NULL,
+            minio_object_key VARCHAR(1000) NOT NULL,
+            file_size_bytes  BIGINT        NOT NULL,
+            department_code  VARCHAR(50)   NOT NULL,
+            uploaded_by      UUID          NOT NULL,
+            uploaded_at      TIMESTAMPTZ   NOT NULL,
+            status           TEXT          NOT NULL,
+            error_detail     TEXT,
+            total_sheets     INTEGER       NOT NULL DEFAULT 0,
+            processed_sheets INTEGER       NOT NULL DEFAULT 0,
+            total_rows       INTEGER       NOT NULL DEFAULT 0,
+            processed_rows   INTEGER       NOT NULL DEFAULT 0,
+            completed_at     TIMESTAMPTZ,
+            hangfire_job_id  TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS upload_sheet_results (
+            id                UUID         PRIMARY KEY,
+            upload_session_id UUID         NOT NULL,
+            sheet_name        VARCHAR(200) NOT NULL,
+            mapped_table_name VARCHAR(200),
+            status            TEXT         NOT NULL,
+            total_rows        INTEGER      NOT NULL DEFAULT 0,
+            inserted_rows     INTEGER      NOT NULL DEFAULT 0,
+            error_detail      TEXT
+        );
+
+        -- FK constraints (ADD IF NOT EXISTS not supported on old PG, use DO block)
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_users_dept') THEN
+                ALTER TABLE users ADD CONSTRAINT fk_users_dept
+                    FOREIGN KEY (department_code) REFERENCES departments(code);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_us_dept') THEN
+                ALTER TABLE upload_sessions ADD CONSTRAINT fk_us_dept
+                    FOREIGN KEY (department_code) REFERENCES departments(code);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_us_user') THEN
+                ALTER TABLE upload_sessions ADD CONSTRAINT fk_us_user
+                    FOREIGN KEY (uploaded_by) REFERENCES users(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_usr_session') THEN
+                ALTER TABLE upload_sheet_results ADD CONSTRAINT fk_usr_session
+                    FOREIGN KEY (upload_session_id) REFERENCES upload_sessions(id) ON DELETE CASCADE;
+            END IF;
+        END $$;
+
+        -- Indexes
+        CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users(username);
+        CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email    ON users(email);
+        CREATE        INDEX IF NOT EXISTS ix_users_dept     ON users(department_code);
+        CREATE        INDEX IF NOT EXISTS ix_us_dept        ON upload_sessions(department_code);
+        CREATE        INDEX IF NOT EXISTS ix_us_user        ON upload_sessions(uploaded_by);
+        CREATE        INDEX IF NOT EXISTS ix_usr_session    ON upload_sheet_results(upload_session_id);
+
+        -- Đánh dấu migration đã chạy
+        INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+        VALUES ('20240101000000_InitialCreate', '9.0.5')
+        ON CONFLICT DO NOTHING;
+    """);
+
+    Log.Information("Fallback schema creation completed.");
+}
 
 // Hangfire dashboard: chỉ SystemAdmin mới xem được
 public class HangfireAuthFilter : Hangfire.Dashboard.IDashboardAuthorizationFilter
