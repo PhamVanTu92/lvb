@@ -1,0 +1,27 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+appsettings.*.local.json
+
+# Node
+node_modules/
+dist/
+.env
+.env.local
+
+# Docker volumes (local)
+postgres_data/
+minio_data/
+redis_data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+logs/
+*.log

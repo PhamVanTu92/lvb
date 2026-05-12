@@ -1,0 +1,15 @@
+# Normalize line endings to LF on server (Linux Docker)
+* text=auto eol=lf
+
+# Force LF for these file types (critical for Docker/shell)
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.conf      text eol=lf
+
+# Binary files – no conversion
+*.png       binary
+*.jpg       binary
+*.ico       binary
+*.svg       binary
+*.woff2     binary
+*.ttf       binary

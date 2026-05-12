@@ -1,0 +1,116 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lvb_postgres
+    environment:
+      POSTGRES_DB: lvb_portal
+      POSTGRES_USER: lvb_user
+      POSTGRES_PASSWORD: lvb_password_2024
+    ports:
+      - "5480:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lvb_user -d lvb_portal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: lvb_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: lvb_minio_admin
+      MINIO_ROOT_PASSWORD: lvb_minio_password_2024
+    ports:
+      - "9900:9000"   # S3 API
+      - "9901:9001"   # Web Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: lvb_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 lvb_minio_admin lvb_minio_password_2024;
+      mc mb --ignore-existing local/lvb-excel-uploads;
+      mc anonymous set none local/lvb-excel-uploads;
+      echo 'MinIO bucket initialized';
+      "
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    container_name: lvb_redis
+    ports:
+      - "6399:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: src/LVB.Portal.API/Dockerfile
+    container_name: lvb_backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=lvb_portal;Username=lvb_user;Password=lvb_password_2024
+      - MinIO__Endpoint=minio:9000
+      - MinIO__AccessKey=lvb_minio_admin
+      - MinIO__SecretKey=lvb_minio_password_2024
+      - MinIO__BucketName=lvb-excel-uploads
+      - MinIO__UseSSL=false
+      - Jwt__SecretKey=lvb_jwt_super_secret_key_2024_change_in_production
+      - Jwt__Issuer=LVB.Portal
+      - Jwt__Audience=LVB.Portal.Clients
+      - Jwt__ExpiryMinutes=480
+      - Upload__MaxFileSizeMB=50
+      - Redis__ConnectionString=redis:6379
+    ports:
+      - "8888:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    container_name: lvb_frontend
+    ports:
+      - "4000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  minio_data:
+  redis_data:
