@@ -156,7 +156,7 @@ using (var scope = app.Services.CreateScope())
     var db  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var pwd = scope.ServiceProvider.GetRequiredService<LVB.Portal.Infrastructure.Services.PasswordService>();
 
-    // Migrate – nếu lỗi thì log và dùng fallback tạo bảng bằng raw SQL
+    // Migrate (có thể skip nếu migration đã trong history)
     try
     {
         await db.Database.MigrateAsync();
@@ -164,7 +164,30 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        Log.Warning(ex, "MigrateAsync failed – attempting raw SQL schema creation as fallback.");
+        Log.Warning(ex, "MigrateAsync threw exception – will check schema manually.");
+    }
+
+    // Kiểm tra bảng 'departments' có thực sự tồn tại không
+    // (migration bị skip khi history có entry nhưng bảng chưa được tạo)
+    var conn = db.Database.GetDbConnection();
+    if (conn.State != System.Data.ConnectionState.Open)
+        await conn.OpenAsync();
+
+    int deptTableCount;
+    using (var cmd = conn.CreateCommand())
+    {
+        cmd.CommandText = """
+            SELECT COUNT(*)::int
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name   = 'departments'
+            """;
+        deptTableCount = (int)(await cmd.ExecuteScalarAsync() ?? 0);
+    }
+
+    if (deptTableCount == 0)
+    {
+        Log.Warning("Schema not found after migration – running raw SQL fallback.");
         await EnsureSchemaAsync(db);
     }
 
