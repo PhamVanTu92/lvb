@@ -162,7 +162,7 @@ function DatasetForm({
   const [form, setForm] = useState({
     sheetName: editing?.sheetName ?? '',
     tableName: editing?.tableName ?? '',
-    departmentCode: editing?.departmentCode ?? (departments[0]?.code ?? ''),
+    departmentCode: editing?.departmentCode ?? '',
     columnMappingJson: editing?.columnMappingJson ?? '{}',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -188,7 +188,6 @@ function DatasetForm({
     if (!form.sheetName.trim()) errs.sheetName = 'Vui lòng nhập tên hiển thị'
     if (!form.tableName.trim()) errs.tableName = 'Vui lòng nhập tên bảng'
     else if (!/^[a-z0-9_]+$/.test(form.tableName)) errs.tableName = 'Chỉ dùng chữ thường, số và dấu _'
-    if (!form.departmentCode) errs.departmentCode = 'Vui lòng chọn phòng ban'
     try { JSON.parse(form.columnMappingJson) } catch { setJsonError('JSON không hợp lệ') }
     return errs
   }
@@ -268,11 +267,14 @@ function DatasetForm({
               onChange={e => set('departmentCode', e.target.value)}
               disabled={!!editing}
             >
-              <option value="">-- Chọn phòng ban --</option>
+              <option value="">🌐 Tất cả phòng ban (dùng chung)</option>
               {departments.map(d => (
                 <option key={d.code} value={d.code}>{d.name} ({d.code})</option>
               ))}
             </select>
+            <p className="text-gray-400 text-xs mt-1">
+              "Tất cả" → hiển thị cho mọi phòng ban. Chọn cụ thể → chỉ phòng đó thấy màn hình này.
+            </p>
             {errors.departmentCode && <p className="text-red-500 text-xs mt-1">{errors.departmentCode}</p>}
           </div>
 

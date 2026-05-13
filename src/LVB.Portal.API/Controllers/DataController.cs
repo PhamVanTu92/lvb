@@ -19,8 +19,12 @@ public class DataController : ControllerBase
     [Authorize]
     public async Task<IActionResult> GetDepartments([FromServices] LVB.Portal.Infrastructure.Data.AppDbContext db)
     {
+        var isAdmin = User.IsInRole("SystemAdmin");
+        var userDeptCode = User.FindFirst("dept")?.Value ?? "";
+
+        // Non-admin users only see their own department
         var depts = await db.Departments
-            .Where(d => d.IsActive)
+            .Where(d => d.IsActive && (isAdmin || d.Code == userDeptCode))
             .Select(d => new { d.Code, d.Name })
             .ToListAsync();
 

@@ -146,8 +146,11 @@ public class AdminController : ControllerBase
         if (await _db.SheetTableMappings.AnyAsync(m => m.TableName == request.TableName && m.DepartmentCode == request.DepartmentCode))
             return Conflict(new { message = "Tên bảng đã được đăng ký cho phòng ban này" });
 
-        var dept = await _db.Departments.FindAsync(request.DepartmentCode);
-        if (dept == null) return BadRequest(new { message = "Phòng ban không tồn tại" });
+        if (!string.IsNullOrEmpty(request.DepartmentCode))
+        {
+            var dept = await _db.Departments.FindAsync(request.DepartmentCode);
+            if (dept == null) return BadRequest(new { message = "Phòng ban không tồn tại" });
+        }
 
         var mapping = new LVB.Portal.Domain.Entities.SheetTableMapping
         {

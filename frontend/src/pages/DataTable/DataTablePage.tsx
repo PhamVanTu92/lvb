@@ -169,7 +169,10 @@ export default function DataTablePage() {
             )}
           </>
         ) : (
-          <p className="text-center py-12 text-gray-400">Không tìm thấy bảng dữ liệu</p>
+          <div className="text-center py-16 text-gray-400">
+            <p className="text-lg mb-1">Chưa có dữ liệu</p>
+            <p className="text-sm">Dataset này chưa có lần upload nào thành công. Vui lòng đẩy file Excel.</p>
+          </div>
         )}
       </div>
     </div>

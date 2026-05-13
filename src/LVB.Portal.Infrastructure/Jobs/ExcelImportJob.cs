@@ -72,8 +72,35 @@ public class ExcelImportJob
             foreach (var worksheet in sheets)
             {
                 var sheetName = worksheet.Name.Trim();
+
+                // 1. Exact sheet name match
                 var mapping = mappings.FirstOrDefault(m =>
                     string.Equals(m.SheetName, sheetName, StringComparison.OrdinalIgnoreCase));
+
+                // 2. Fallback: match by column headers if sheet name is generic or unrecognised
+                if (mapping == null)
+                {
+                    var headerRow = worksheet.RowsUsed().FirstOrDefault();
+                    if (headerRow != null)
+                    {
+                        var excelHeaders = headerRow.CellsUsed()
+                            .Select(c => c.GetString().Trim())
+                            .Where(h => !string.IsNullOrEmpty(h))
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                        mapping = mappings
+                            .Select(m =>
+                            {
+                                var keys = TryParseKeys(m.ColumnMappingJson);
+                                var hits = keys.Count(k => excelHeaders.Contains(k));
+                                return (m, hits, keys.Length);
+                            })
+                            .Where(x => x.hits > 0 && x.hits >= Math.Max(1, x.Length / 2))
+                            .OrderByDescending(x => x.hits)
+                            .Select(x => x.m)
+                            .FirstOrDefault();
+                    }
+                }
 
                 var sheetResult = new UploadSheetResult
                 {
@@ -87,8 +114,13 @@ public class ExcelImportJob
 
                 if (mapping == null)
                 {
-                    sheetResult.Status = UploadStatus.Failed;
-                    sheetResult.ErrorDetail = $"Không tìm thấy mapping cho sheet '{sheetName}'";
+                    // Not an error — just skip unrecognised sheets silently
+                    sheetResult.Status = UploadStatus.Success;
+                    sheetResult.InsertedRows = 0;
+                    sheetResult.ErrorDetail = $"Sheet '{sheetName}' không có mapping, bỏ qua";
+                    await _db.SaveChangesAsync();
+                    processedSheets++;
+                    session.ProcessedSheets = processedSheets;
                     await _db.SaveChangesAsync();
                     continue;
                 }
@@ -237,6 +269,16 @@ public class ExcelImportJob
             XLDataType.Boolean => cell.GetBoolean() ? "true" : "false",
             _ => $"'{cell.GetString().Replace("'", "''")}'",
         };
+    }
+
+    private static string[] TryParseKeys(string json)
+    {
+        try
+        {
+            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            return dict?.Keys.ToArray() ?? [];
+        }
+        catch { return []; }
     }
 
     private async Task NotifyProgress(string sessionId, string status, int progress, string message)

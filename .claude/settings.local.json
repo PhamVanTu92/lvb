@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose config *)",
+      "PowerShell(Get-ChildItem C:\\\\Projects\\\\lvb-portal -Recurse -Name -Depth 4 | Where-Object { $_ -notmatch \"node_modules|obj|bin|dist|\\\\.git\" } | Sort-Object)",
+      "PowerShell(Get-ChildItem \"$env:USERPROFILE\\\\.nuget\\\\packages\\\\hangfire.postgresql\" -ErrorAction SilentlyContinue | Select-Object Name)",
+      "PowerShell(dotnet nuget locals all --list)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import sys; sys.stdout.buffer.write\\(sys.stdin.buffer.read\\(\\)\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
+    ]
+  }
+}

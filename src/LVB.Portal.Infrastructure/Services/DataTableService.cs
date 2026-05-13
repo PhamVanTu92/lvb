@@ -19,20 +19,13 @@ public class DataTableService
 
     public async Task<IEnumerable<TableInfo>> GetAvailableTablesAsync(string deptCode)
     {
-        var mappings = await _db.SheetTableMappings
+        // Return all active registered datasets for this department.
+        // Tables that don't exist yet (no upload) will show "no data" in the viewer.
+        return await _db.SheetTableMappings
             .Where(m => m.IsActive && (m.DepartmentCode == deptCode || m.DepartmentCode == ""))
-            .Select(m => new { m.TableName, m.SheetName })
+            .Select(m => new TableInfo(m.TableName, m.SheetName))
             .Distinct()
             .ToListAsync();
-
-        // Filter to only tables that actually exist in the DB
-        var existing = new List<TableInfo>();
-        foreach (var m in mappings)
-        {
-            if (await TableExistsAsync(m.TableName))
-                existing.Add(new TableInfo(m.TableName, m.SheetName));
-        }
-        return existing;
     }
 
     public record TableInfo(string TableName, string SheetName);
