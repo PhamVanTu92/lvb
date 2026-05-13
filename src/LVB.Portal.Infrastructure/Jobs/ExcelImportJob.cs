@@ -69,55 +69,23 @@ public class ExcelImportJob
             int processedSheets = 0;
             int totalRowsProcessed = 0;
 
-            foreach (var worksheet in sheets)
+            // Chỉ xử lý sheet đầu tiên
+            var worksheet = sheets.FirstOrDefault();
+            if (worksheet == null) return;
+
+            session.TotalSheets = 1;
+            await _db.SaveChangesAsync();
+
             {
                 var sheetName = worksheet.Name.Trim();
 
-                // 1. Exact SheetName match (Vietnamese display name)
+                // Tìm mapping: tên sheet → tên bảng → header cột → mapping duy nhất của dept
                 var mapping = mappings.FirstOrDefault(m =>
-                    string.Equals(m.SheetName, sheetName, StringComparison.OrdinalIgnoreCase));
-
-                // 2. Match by TableName (snake_case DB name — users sometimes name sheets this way)
-                mapping ??= mappings.FirstOrDefault(m =>
-                    string.Equals(m.TableName, sheetName, StringComparison.OrdinalIgnoreCase));
-
-                // 3. Normalised match: strip accents/spaces and compare lowercased
-                if (mapping == null)
-                {
-                    var normalised = NormaliseVietnamese(sheetName);
-                    mapping = mappings.FirstOrDefault(m =>
-                        string.Equals(NormaliseVietnamese(m.SheetName), normalised, StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(NormaliseVietnamese(m.TableName), normalised, StringComparison.OrdinalIgnoreCase));
-                }
-
-                // 4. Fallback: match by column-header overlap
-                if (mapping == null)
-                {
-                    var headerRow = worksheet.RowsUsed().FirstOrDefault();
-                    if (headerRow != null)
-                    {
-                        var excelHeaders = headerRow.CellsUsed()
-                            .Select(c => c.GetString().Trim())
-                            .Where(h => !string.IsNullOrEmpty(h))
-                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                        mapping = mappings
-                            .Select(m =>
-                            {
-                                var keys = TryParseKeys(m.ColumnMappingJson);
-                                // also check DB column names (values) in case headers are snake_case
-                                var vals = TryParseValues(m.ColumnMappingJson);
-                                var hits = keys.Count(k => excelHeaders.Contains(k))
-                                         + vals.Count(v => excelHeaders.Contains(v));
-                                var total = Math.Max(1, keys.Length);
-                                return (m, hits, total);
-                            })
-                            .Where(x => x.hits > 0 && x.hits >= Math.Max(1, x.total / 2))
-                            .OrderByDescending(x => x.hits)
-                            .Select(x => x.m)
-                            .FirstOrDefault();
-                    }
-                }
+                        string.Equals(m.SheetName, sheetName, StringComparison.OrdinalIgnoreCase))
+                    ?? mappings.FirstOrDefault(m =>
+                        string.Equals(m.TableName, sheetName, StringComparison.OrdinalIgnoreCase))
+                    ?? FindMappingByHeaders(worksheet, mappings)
+                    ?? (mappings.Count == 1 ? mappings[0] : null);
 
                 var sheetResult = new UploadSheetResult
                 {
@@ -131,45 +99,37 @@ public class ExcelImportJob
 
                 if (mapping == null)
                 {
-                    // Not an error — just skip unrecognised sheets silently
-                    sheetResult.Status = UploadStatus.Success;
-                    sheetResult.InsertedRows = 0;
-                    sheetResult.ErrorDetail = $"Sheet '{sheetName}' không có mapping, bỏ qua";
-                    await _db.SaveChangesAsync();
-                    processedSheets++;
-                    session.ProcessedSheets = processedSheets;
-                    await _db.SaveChangesAsync();
-                    continue;
-                }
-
-                try
-                {
-                    var columnMapping = JsonSerializer.Deserialize<Dictionary<string, string>>(mapping.ColumnMappingJson)
-                        ?? new Dictionary<string, string>();
-
-                    var rowsInserted = await ImportSheetAsync(
-                        worksheet, mapping.TableName, session.DepartmentCode, columnMapping, sessionId);
-
-                    sheetResult.Status = UploadStatus.Success;
-                    sheetResult.InsertedRows = rowsInserted;
-                    sheetResult.TotalRows = rowsInserted;
-                    totalRowsProcessed += rowsInserted;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error processing sheet {SheetName}", sheetName);
                     sheetResult.Status = UploadStatus.Failed;
-                    sheetResult.ErrorDetail = ex.Message;
+                    sheetResult.ErrorDetail = "Không tìm thấy dataset phù hợp. Vui lòng khai báo dataset cho phòng ban này.";
+                    await _db.SaveChangesAsync();
+                }
+                else
+                {
+                    try
+                    {
+                        var columnMapping = JsonSerializer.Deserialize<Dictionary<string, string>>(mapping.ColumnMappingJson)
+                            ?? new Dictionary<string, string>();
+
+                        var rowsInserted = await ImportSheetAsync(
+                            worksheet, mapping.TableName, session.DepartmentCode, columnMapping, sessionId);
+
+                        sheetResult.Status = UploadStatus.Success;
+                        sheetResult.InsertedRows = rowsInserted;
+                        sheetResult.TotalRows = rowsInserted;
+                        totalRowsProcessed += rowsInserted;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error processing sheet {SheetName}", sheetName);
+                        sheetResult.Status = UploadStatus.Failed;
+                        sheetResult.ErrorDetail = ex.Message;
+                    }
                 }
 
-                processedSheets++;
-                session.ProcessedSheets = processedSheets;
+                session.ProcessedSheets = 1;
                 session.ProcessedRows = totalRowsProcessed;
                 await _db.SaveChangesAsync();
-
-                int progress = (int)((double)processedSheets / session.TotalSheets * 100);
-                await NotifyProgress(sessionId.ToString(), "processing", progress,
-                    $"Đã xử lý {processedSheets}/{session.TotalSheets} sheet");
+                await NotifyProgress(sessionId.ToString(), "processing", 100, "Đang hoàn tất...");
             }
 
             session.Status = UploadStatus.Success;
@@ -288,36 +248,31 @@ public class ExcelImportJob
         };
     }
 
-    private static string[] TryParseKeys(string json)
+    private static SheetTableMapping? FindMappingByHeaders(IXLWorksheet ws, List<SheetTableMapping> mappings)
     {
-        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json)?.Keys.ToArray() ?? []; }
-        catch { return []; }
-    }
+        var headerRow = ws.RowsUsed().FirstOrDefault();
+        if (headerRow == null) return null;
 
-    private static string[] TryParseValues(string json)
-    {
-        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json)?.Values.ToArray() ?? []; }
-        catch { return []; }
-    }
+        var excelHeaders = headerRow.CellsUsed()
+            .Select(c => c.GetString().Trim())
+            .Where(h => !string.IsNullOrEmpty(h))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Strips Vietnamese diacritics + converts đ→d + lowercases + replaces non-alnum with _.
-    /// "Thu nhập ròng dịch vụ" → "thu_nhap_rong_dich_vu"
-    /// </summary>
-    private static string NormaliseVietnamese(string input)
-    {
-        var s = input.Trim().ToLowerInvariant();
-        s = s.Replace('đ', 'd').Replace('Đ', 'd');
-        var normalised = s.Normalize(System.Text.NormalizationForm.FormD);
-        var sb = new System.Text.StringBuilder();
-        foreach (var c in normalised)
-        {
-            var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
-            if (cat != System.Globalization.UnicodeCategory.NonSpacingMark)
-                sb.Append(c);
-        }
-        var result = sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
-        return System.Text.RegularExpressions.Regex.Replace(result, @"[^a-z0-9]+", "_").Trim('_');
+        return mappings
+            .Select(m =>
+            {
+                Dictionary<string, string>? dict = null;
+                try { dict = JsonSerializer.Deserialize<Dictionary<string, string>>(m.ColumnMappingJson); } catch { }
+                var keys = dict?.Keys ?? [];
+                var vals = dict?.Values ?? [];
+                var hits = keys.Count(k => excelHeaders.Contains(k))
+                         + vals.Count(v => excelHeaders.Contains(v));
+                return (m, hits, total: Math.Max(1, dict?.Count ?? 1));
+            })
+            .Where(x => x.hits > 0 && x.hits >= Math.Max(1, x.total / 2))
+            .OrderByDescending(x => x.hits)
+            .Select(x => x.m)
+            .FirstOrDefault();
     }
 
     private async Task NotifyProgress(string sessionId, string status, int progress, string message)
