@@ -6,7 +6,8 @@ public record DataTableQueryRequest(
     int Page = 1,
     int PageSize = 50,
     string? Search = null,
-    Guid? SessionId = null
+    Guid? SessionId = null,
+    string? ColumnFiltersJson = null
 );
 
 public record DataTableResult(

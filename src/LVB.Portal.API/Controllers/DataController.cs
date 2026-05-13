@@ -89,7 +89,8 @@ public class DataController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? search = null,
-        [FromQuery] Guid? sessionId = null)
+        [FromQuery] Guid? sessionId = null,
+        [FromQuery] string? columnFilters = null)
     {
         // "_all" = global dataset, admin only
         if (dept == "_all" && !IsAdmin()) return Forbid();
@@ -101,7 +102,7 @@ public class DataController : ControllerBase
 
         pageSize = Math.Clamp(pageSize, 1, 200);
         var result = await _dataService.QueryTableAsync(new DataTableQueryRequest(
-            dept, table, page, pageSize, search, sessionId));
+            dept, table, page, pageSize, search, sessionId, columnFilters));
 
         if (result == null) return NotFound(new { message = $"Table '{table}' not found" });
         return Ok(result);

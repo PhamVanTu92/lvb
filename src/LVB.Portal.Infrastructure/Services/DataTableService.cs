@@ -40,9 +40,10 @@ public class DataTableService
             .FirstOrDefaultAsync(m => m.TableName == request.TableName && m.IsActive);
         if (mapping == null) return null;
 
-        var countSql = BuildCountSql(request.TableName, request.DepartmentCode, request.SessionId, request.Search);
-        var dataSql = BuildDataSql(request.TableName, request.DepartmentCode, request.SessionId, request.Search,
-            request.Page, request.PageSize);
+        var tableColumns = await GetTableColumnsAsync(request.TableName);
+        var countSql = BuildCountSql(request.TableName, request.DepartmentCode, request.SessionId, request.Search, request.ColumnFiltersJson, tableColumns);
+        var dataSql = BuildDataSql(request.TableName, request.DepartmentCode, request.SessionId, request.Search, request.ColumnFiltersJson,
+            request.Page, request.PageSize, tableColumns);
 
         var totalRows = await ExecuteCountAsync(countSql);
         var rows = await ExecuteQueryAsync(dataSql);
@@ -95,22 +96,22 @@ public class DataTableService
         ));
     }
 
-    private string BuildCountSql(string table, string dept, Guid? sessionId, string? search)
+    private string BuildCountSql(string table, string dept, Guid? sessionId, string? search, string? columnFiltersJson, List<string> tableColumns)
     {
-        var conditions = BuildConditions(dept, sessionId);
+        var conditions = BuildConditions(dept, sessionId, search, columnFiltersJson, tableColumns);
         var where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
         return $"SELECT COUNT(*) FROM {table} {where}";
     }
 
-    private string BuildDataSql(string table, string dept, Guid? sessionId, string? search, int page, int pageSize)
+    private string BuildDataSql(string table, string dept, Guid? sessionId, string? search, string? columnFiltersJson, int page, int pageSize, List<string> tableColumns)
     {
-        var conditions = BuildConditions(dept, sessionId);
+        var conditions = BuildConditions(dept, sessionId, search, columnFiltersJson, tableColumns);
         var where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
         var offset = (page - 1) * pageSize;
         return $"SELECT * FROM {table} {where} ORDER BY id LIMIT {pageSize} OFFSET {offset}";
     }
 
-    private static List<string> BuildConditions(string dept, Guid? sessionId)
+    private static List<string> BuildConditions(string dept, Guid? sessionId, string? search, string? columnFiltersJson, List<string> tableColumns)
     {
         var conditions = new List<string>();
         // "_all" means no department filter (admin viewing global dataset)
@@ -118,7 +119,55 @@ public class DataTableService
             conditions.Add($"dept_code = '{dept.Replace("'", "''")}'");
         if (sessionId.HasValue)
             conditions.Add($"upload_session_id = '{sessionId}'");
+
+        // Global search: ILIKE across all non-system text columns
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var systemCols = new HashSet<string> { "id", "dept_code", "upload_session_id", "created_at" };
+            var searchCols = tableColumns.Where(c => !systemCols.Contains(c)).ToList();
+            if (searchCols.Count > 0)
+            {
+                var escaped = search.Replace("'", "''").Replace("%", "\\%").Replace("_", "\\_");
+                var parts = searchCols.Select(c => $"{c}::text ILIKE '%{escaped}%' ESCAPE '\\'");
+                conditions.Add($"({string.Join(" OR ", parts)})");
+            }
+        }
+
+        // Per-column filters
+        if (!string.IsNullOrWhiteSpace(columnFiltersJson))
+        {
+            try
+            {
+                var filters = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(columnFiltersJson);
+                if (filters != null)
+                {
+                    foreach (var (col, val) in filters)
+                    {
+                        if (string.IsNullOrWhiteSpace(val)) continue;
+                        if (!tableColumns.Contains(col)) continue; // prevent injection
+                        var escaped = val.Replace("'", "''").Replace("%", "\\%").Replace("_", "\\_");
+                        conditions.Add($"{col}::text ILIKE '%{escaped}%' ESCAPE '\\'");
+                    }
+                }
+            }
+            catch { /* ignore malformed JSON */ }
+        }
+
         return conditions;
+    }
+
+    private async Task<List<string>> GetTableColumnsAsync(string tableName)
+    {
+        var sql = $"SELECT column_name FROM information_schema.columns WHERE table_name = '{tableName.Replace("'", "''")}' AND table_schema = 'public' ORDER BY ordinal_position";
+        var columns = new List<string>();
+        using var cmd = _db.Database.GetDbConnection().CreateCommand();
+        cmd.CommandText = sql;
+        if (cmd.Connection!.State != System.Data.ConnectionState.Open)
+            await cmd.Connection.OpenAsync();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            columns.Add(reader.GetString(0));
+        return columns;
     }
 
     private async Task<int> ExecuteCountAsync(string sql)
