@@ -6,8 +6,15 @@ import { uploadApi } from '../../api/upload'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   ArrowLeft, Download, Trash2, Edit2, Check, X,
-  Search, ChevronLeft, ChevronRight, Filter
+  Search, ChevronLeft, ChevronRight, Filter, ClipboardList
 } from 'lucide-react'
+import type { AuditLog } from '../../types'
+
+const AUDIT_ACTION_META: Record<string, { label: string; color: string }> = {
+  BATCH_CREATED: { label: 'Tạo lô',        color: 'bg-green-100 text-green-700' },
+  BATCH_UPDATED: { label: 'Cập nhật lô',   color: 'bg-blue-100 text-blue-700' },
+  BATCH_DELETED: { label: 'Xóa lô',        color: 'bg-red-100 text-red-700' },
+}
 
 function StatusBadge({ status }: { status: string }) {
   if (status === 'Success')
@@ -101,6 +108,13 @@ export default function BatchDetailPage() {
     try { return JSON.parse(batch?.metadataJson ?? '{}') } catch { return {} }
   })()
   const hasMetadata = Object.keys(metadataFields).length > 0
+
+  // Batch audit trail
+  const { data: auditLogs } = useQuery<AuditLog[]>({
+    queryKey: ['batch-audit', sessionId],
+    queryFn: () => dataApi.getBatchAudit(dept!, table!, sessionId!).then(r => r.data),
+    enabled: !!sessionId,
+  })
 
   const { data: tableData, isLoading: tableLoading } = useQuery({
     queryKey: ['batch-data', dept, table, sessionId, page, pageSize, search, columnFilters],
@@ -282,6 +296,42 @@ export default function BatchDetailPage() {
                 )}
               </div>
             </dl>
+
+            {/* Audit trail */}
+            {auditLogs && auditLogs.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <ClipboardList size={12} /> Lịch sử thay đổi
+                </dt>
+                <div className="space-y-2">
+                  {auditLogs.map(log => {
+                    const meta = AUDIT_ACTION_META[log.action] ?? { label: log.action, color: 'bg-gray-100 text-gray-600' }
+                    return (
+                      <div key={log.id} className="flex items-start gap-2">
+                        <span className={`mt-0.5 text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${meta.color}`}>
+                          {meta.label}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs text-gray-600 font-medium">{log.username || '—'}</p>
+                          <p className="text-xs text-gray-400">
+                            {new Date(log.createdAt).toLocaleString('vi-VN', {
+                              day: '2-digit', month: '2-digit', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {isAdmin && (
+                  <a href={`/admin/audit-logs`}
+                    className="mt-2 text-xs text-blue-500 hover:underline block">
+                    Xem toàn bộ nhật ký →
+                  </a>
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="mt-5 pt-4 border-t border-gray-100 space-y-2">

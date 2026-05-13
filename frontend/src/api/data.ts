@@ -1,5 +1,5 @@
 import api from './client'
-import type { BatchListResult, DatasetField, DataTableResult, Department } from '../types'
+import type { AuditLog, BatchListResult, DatasetField, DataTableResult, Department, PagedResult } from '../types'
 
 export const dataApi = {
   getDepartments: () => api.get<Department[]>('/departments'),
@@ -49,4 +49,16 @@ export const dataApi = {
 
   deleteDatasetField: (id: string) =>
     api.delete(`/admin/dataset-fields/${id}`),
+
+  // Audit logs
+  getAuditLogs: (params: {
+    page?: number; pageSize?: number; action?: string; entityType?: string;
+    username?: string; entityId?: string; from?: string; to?: string;
+  }) =>
+    api.get<{ items: AuditLog[]; totalCount: number; page: number; pageSize: number }>(
+      '/admin/audit-logs', { params }
+    ),
+
+  getBatchAudit: (dept: string, table: string, sessionId: string, limit = 20) =>
+    api.get<AuditLog[]>(`/data/${dept}/${table}/batches/${sessionId}/audit`, { params: { limit } }),
 }

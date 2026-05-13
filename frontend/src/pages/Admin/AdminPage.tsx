@@ -1,9 +1,10 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { Users, Building2, Key, Database } from 'lucide-react'
+import { Users, Building2, Key, Database, ClipboardList } from 'lucide-react'
 import UsersTab from './UsersTab'
 import DepartmentsTab from './DepartmentsTab'
 import ApiKeysTab from './ApiKeysTab'
 import DatasetMappingsTab from './DatasetMappingsTab'
+import AuditLogsTab from './AuditLogsTab'
 
 export default function AdminPage() {
   const tabClass = ({ isActive }: { isActive: boolean }) =>
@@ -27,12 +28,16 @@ export default function AdminPage() {
         <NavLink to="/admin/api-keys" className={tabClass}>
           <Key size={16} /> API Keys (iTitan)
         </NavLink>
+        <NavLink to="/admin/audit-logs" className={tabClass}>
+          <ClipboardList size={16} /> Nhật ký
+        </NavLink>
       </div>
       <Routes>
         <Route path="users" element={<UsersTab />} />
         <Route path="departments" element={<DepartmentsTab />} />
         <Route path="datasets" element={<DatasetMappingsTab />} />
         <Route path="api-keys" element={<ApiKeysTab />} />
+        <Route path="audit-logs" element={<AuditLogsTab />} />
         <Route index element={<UsersTab />} />
       </Routes>
     </div>

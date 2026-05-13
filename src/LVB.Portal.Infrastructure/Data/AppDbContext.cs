@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<SheetTableMapping> SheetTableMappings => Set<SheetTableMapping>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<DatasetField> DatasetFields => Set<DatasetField>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -102,6 +103,22 @@ public class AppDbContext : DbContext
                 .WithMany(m => m.Fields)
                 .HasForeignKey(f => f.MappingId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // AuditLog
+        modelBuilder.Entity<AuditLog>(e =>
+        {
+            e.HasKey(l => l.Id);
+            e.Property(l => l.Action).HasMaxLength(100).IsRequired();
+            e.Property(l => l.EntityType).HasMaxLength(100).IsRequired();
+            e.Property(l => l.EntityId).HasMaxLength(200);
+            e.Property(l => l.EntityName).HasMaxLength(500);
+            e.Property(l => l.Username).HasMaxLength(200);
+            e.Property(l => l.DepartmentCode).HasMaxLength(50);
+            e.Property(l => l.IpAddress).HasMaxLength(50);
+            e.HasIndex(l => l.CreatedAt);
+            e.HasIndex(l => new { l.EntityType, l.EntityId });
+            e.HasIndex(l => l.UserId);
         });
 
         // Seed default departments

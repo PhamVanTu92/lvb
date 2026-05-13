@@ -18,19 +18,22 @@ public class UploadService
     private readonly IBackgroundJobClient _jobClient;
     private readonly IConfiguration _config;
     private readonly ILogger<UploadService> _logger;
+    private readonly AuditService _auditService;
 
     public UploadService(
         AppDbContext db,
         IStorageService storage,
         IBackgroundJobClient jobClient,
         IConfiguration config,
-        ILogger<UploadService> logger)
+        ILogger<UploadService> logger,
+        AuditService auditService)
     {
         _db = db;
         _storage = storage;
         _jobClient = jobClient;
         _config = config;
         _logger = logger;
+        _auditService = auditService;
     }
 
     public async Task<(UploadSessionDto? Result, string? Error)> InitiateUploadAsync(
@@ -76,6 +79,10 @@ public class UploadService
         var jobId = _jobClient.Enqueue<ExcelImportJob>(job => job.ProcessAsync(session.Id));
         session.HangfireJobId = jobId;
         await _db.SaveChangesAsync();
+
+        await _auditService.LogAsync("BATCH_CREATED", "Batch", session.Id.ToString(),
+            session.BatchName ?? session.FileName,
+            new { session.FileName, session.DepartmentCode, session.DataMonth, session.SelectedMappingId });
 
         _logger.LogInformation("Upload initiated. Session: {SessionId}, Job: {JobId}", session.Id, jobId);
 

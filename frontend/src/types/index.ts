@@ -92,6 +92,19 @@ export interface BatchListResult {
   pageSize: number
 }
 
+export interface AuditLog {
+  id: string
+  action: string
+  entityType: string
+  entityId?: string
+  entityName?: string
+  username?: string
+  departmentCode?: string
+  details?: string
+  ipAddress?: string
+  createdAt: string
+}
+
 export interface DatasetField {
   id: string
   mappingId: string

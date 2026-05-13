@@ -40,6 +40,8 @@ builder.Services.AddSingleton<IMinioClient>(sp =>
         .Build();
 });
 builder.Services.AddScoped<IStorageService, MinioStorageService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AuditService>();
 
 // ── JWT Auth ─────────────────────────────────────────────────────────────────
 var jwtKey = builder.Configuration["Jwt:SecretKey"]
@@ -336,6 +338,24 @@ static async Task EnsureSchemaAsync(AppDbContext db)
         ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS data_month VARCHAR(20);
         ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS notes TEXT;
         ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS metadata_json TEXT;
+
+        -- Audit log
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+            action            VARCHAR(100) NOT NULL,
+            entity_type       VARCHAR(100) NOT NULL,
+            entity_id         VARCHAR(200),
+            entity_name       VARCHAR(500),
+            user_id           UUID,
+            username          VARCHAR(200),
+            department_code   VARCHAR(50),
+            details           TEXT,
+            ip_address        VARCHAR(50),
+            created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 
         -- Dataset field schema definitions
         CREATE TABLE IF NOT EXISTS dataset_fields (
