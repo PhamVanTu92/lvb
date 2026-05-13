@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { LayoutDashboard, Upload, Table2, Settings, LogOut, Building2, Menu, X, History } from 'lucide-react'
+import { LayoutDashboard, Upload, Table2, Settings, LogOut, Building2, Menu, X, History, HelpCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { dataApi } from '../../api/data'
@@ -91,6 +91,11 @@ export default function Layout() {
               {sidebarOpen && 'Quản trị'}
             </NavLink>
           )}
+
+          <NavLink to="/help" className={navItemClass}>
+            <HelpCircle size={18} />
+            {sidebarOpen && 'Trợ giúp'}
+          </NavLink>
         </nav>
 
         {/* Logout */}

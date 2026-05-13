@@ -7,6 +7,7 @@ import DataTablePage from './pages/DataTable/DataTablePage'
 import AdminPage from './pages/Admin/AdminPage'
 import HistoryPage from './pages/History/HistoryPage'
 import HistoryDetailPage from './pages/History/HistoryDetailPage'
+import HelpPage from './pages/Help/HelpPage'
 import Layout from './components/common/Layout'
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
@@ -28,6 +29,7 @@ function AppRoutes() {
         <Route path="data/:dept/:table" element={<DataTablePage />} />
         <Route path="history" element={<HistoryPage />} />
         <Route path="history/:sessionId" element={<HistoryDetailPage />} />
+        <Route path="help" element={<HelpPage />} />
         <Route path="admin/*" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" />} />
