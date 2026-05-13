@@ -157,9 +157,15 @@ public class ExcelImportJob
         Dictionary<string, string> columnMapping,
         Guid sessionId)
     {
-        // Find header row (first non-empty row)
-        var headerRow = worksheet.RowsUsed().FirstOrDefault();
+        // Find the real header row: the row with the most filled cells (skips title/merged rows)
+        var usedRows = worksheet.RowsUsed().Take(10).ToList(); // scan first 10 rows
+        var headerRow = usedRows
+            .OrderByDescending(r => r.CellsUsed().Count())
+            .FirstOrDefault();
         if (headerRow == null) return 0;
+
+        // Data rows = all used rows AFTER the header row
+        var headerRowNum = headerRow.RowNumber();
 
         // Build header → column index map
         var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -177,7 +183,7 @@ public class ExcelImportJob
                 columnMapping[header] = ToSnakeCase(header);
         }
 
-        var dataRows = worksheet.RowsUsed().Skip(1).ToList();
+        var dataRows = worksheet.RowsUsed().Where(r => r.RowNumber() > headerRowNum).ToList();
         if (dataRows.Count == 0) return 0;
 
         // Build INSERT SQL dynamically
@@ -284,7 +290,9 @@ public class ExcelImportJob
 
     private static SheetTableMapping? FindMappingByHeaders(IXLWorksheet ws, List<SheetTableMapping> mappings)
     {
-        var headerRow = ws.RowsUsed().FirstOrDefault();
+        var headerRow = ws.RowsUsed().Take(10)
+            .OrderByDescending(r => r.CellsUsed().Count())
+            .FirstOrDefault();
         if (headerRow == null) return null;
 
         var excelHeaders = headerRow.CellsUsed()
