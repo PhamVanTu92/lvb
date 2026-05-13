@@ -255,7 +255,7 @@ export default function UploadPage() {
                 onChange={e => setMappingId(e.target.value)}
               >
                 <option value="">-- Chọn loại dữ liệu --</option>
-                {mappingsData.filter(m => m.isActive).map(m => (
+                {mappingsData.map(m => (
                   <option key={m.id} value={m.id}>
                     {m.sheetName}
                     {m.departmentCode ? ` (${m.departmentCode})` : ' (Tất cả phòng ban)'}
