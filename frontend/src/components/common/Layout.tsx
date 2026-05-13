@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { LayoutDashboard, Upload, Table2, Settings, LogOut, Building2, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Upload, Table2, Settings, LogOut, Building2, Menu, X, History } from 'lucide-react'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { dataApi } from '../../api/data'
@@ -61,6 +61,10 @@ export default function Layout() {
           <NavLink to="/upload" className={navItemClass}>
             <Upload size={18} />
             {sidebarOpen && 'Đẩy Tài Liệu'}
+          </NavLink>
+          <NavLink to="/history" className={navItemClass}>
+            <History size={18} />
+            {sidebarOpen && 'Lịch sử đẩy dữ liệu'}
           </NavLink>
 
           {sidebarOpen && depts && depts.length > 0 && (

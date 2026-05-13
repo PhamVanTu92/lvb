@@ -4,9 +4,9 @@ import type { DataTableResult, Department } from '../types'
 export const dataApi = {
   getDepartments: () => api.get<Department[]>('/departments'),
 
-  getData: (dept: string, table: string, page = 1, pageSize = 50, search?: string) =>
+  getData: (dept: string, table: string, page = 1, pageSize = 50, search?: string, sessionId?: string) =>
     api.get<DataTableResult>(`/data/${dept}/${table}`, {
-      params: { page, pageSize, search },
+      params: { page, pageSize, search, sessionId },
     }),
 
   getVersions: (dept: string, table: string) =>

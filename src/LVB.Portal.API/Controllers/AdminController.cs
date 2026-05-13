@@ -16,11 +16,13 @@ public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly PasswordService _passwordService;
+    private readonly ILogger<AdminController> _logger;
 
-    public AdminController(AppDbContext db, PasswordService passwordService)
+    public AdminController(AppDbContext db, PasswordService passwordService, ILogger<AdminController> logger)
     {
         _db = db;
         _passwordService = passwordService;
+        _logger = logger;
     }
 
     /// <summary>Danh sách tất cả users</summary>
@@ -130,6 +132,75 @@ public class AdminController : ControllerBase
         _db.Departments.Add(dept);
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetDepartments), dept);
+    }
+
+    // ─── Upload History (admin view + delete) ──────────────────────────
+
+    /// <summary>Toàn bộ lịch sử upload (admin)</summary>
+    [HttpGet("uploads")]
+    public async Task<IActionResult> GetUploads(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? dept = null)
+    {
+        var query = _db.UploadSessions
+            .Include(s => s.SheetResults)
+            .Include(s => s.Uploader)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(dept))
+            query = query.Where(s => s.DepartmentCode == dept);
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderByDescending(s => s.UploadedAt)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .ToListAsync();
+
+        var dtos = items.Select(s => new
+        {
+            s.Id, s.FileName, s.FileSizeBytes, s.DepartmentCode,
+            UploaderName = s.Uploader?.FullName ?? "",
+            s.UploadedAt, Status = s.Status.ToString(),
+            s.TotalSheets, s.ProcessedSheets, s.TotalRows, s.ErrorDetail, s.CompletedAt,
+            SheetResults = s.SheetResults.Select(r => new
+            {
+                r.SheetName, r.MappedTableName, Status = r.Status.ToString(),
+                r.InsertedRows, r.ErrorDetail
+            })
+        });
+
+        return Ok(new { Items = dtos, TotalCount = total, Page = page, PageSize = pageSize });
+    }
+
+    /// <summary>Xóa upload session và toàn bộ dữ liệu đã import</summary>
+    [HttpDelete("uploads/{id:guid}")]
+    public async Task<IActionResult> DeleteUpload(Guid id)
+    {
+        var session = await _db.UploadSessions
+            .Include(s => s.SheetResults)
+            .FirstOrDefaultAsync(s => s.Id == id);
+        if (session == null) return NotFound();
+
+        // Xóa dữ liệu đã import từ các bảng động
+        foreach (var sr in session.SheetResults.Where(r => r.MappedTableName != null))
+        {
+            try
+            {
+                var tableExists = await _db.Database.ExecuteSqlRawAsync(
+                    $"SELECT 1 FROM information_schema.tables WHERE table_name = '{sr.MappedTableName!.Replace("'","''")}' LIMIT 1");
+                await _db.Database.ExecuteSqlRawAsync(
+                    $"DELETE FROM {sr.MappedTableName} WHERE upload_session_id = '{id}'");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not delete rows from {Table} for session {Id}", sr.MappedTableName, id);
+            }
+        }
+
+        _db.UploadSessions.Remove(session);
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 
     // ─── Sheet-Table Mappings (Dataset registry) ───────────────────────
