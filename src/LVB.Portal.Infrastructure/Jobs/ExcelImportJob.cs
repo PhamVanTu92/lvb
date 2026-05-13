@@ -66,7 +66,6 @@ public class ExcelImportJob
             session.TotalSheets = sheets.Count;
             await _db.SaveChangesAsync();
 
-            int processedSheets = 0;
             int totalRowsProcessed = 0;
 
             // Chỉ xử lý sheet đầu tiên
@@ -263,8 +262,8 @@ public class ExcelImportJob
             {
                 Dictionary<string, string>? dict = null;
                 try { dict = JsonSerializer.Deserialize<Dictionary<string, string>>(m.ColumnMappingJson); } catch { }
-                var keys = dict?.Keys ?? [];
-                var vals = dict?.Values ?? [];
+                var keys = dict?.Keys.ToArray() ?? Array.Empty<string>();
+                var vals = dict?.Values.ToArray() ?? Array.Empty<string>();
                 var hits = keys.Count(k => excelHeaders.Contains(k))
                          + vals.Count(v => excelHeaders.Contains(v));
                 return (m, hits, total: Math.Max(1, dict?.Count ?? 1));
