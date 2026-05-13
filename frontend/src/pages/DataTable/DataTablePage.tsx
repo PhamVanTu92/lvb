@@ -8,6 +8,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import type { BatchListItem } from '../../types'
+import UploadModal from './UploadModal'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả trạng thái' },
@@ -51,6 +52,8 @@ export default function DataTablePage() {
   })
   const mappingId = mappingsData?.find(m => m.tableName === table)?.id ?? ''
 
+  const [showUpload, setShowUpload] = useState(false)
+
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [search, setSearch] = useState('')
@@ -82,13 +85,6 @@ export default function DataTablePage() {
 
   // Distinct months from loaded data for filter dropdown
   const months = Array.from(new Set(data?.items?.map(i => i.dataMonth).filter(Boolean) ?? []))
-
-  const goToUpload = () => {
-    const url = mappingId
-      ? `/upload?mappingId=${mappingId}`
-      : `/upload?dept=${dept}&table=${table}`
-    navigate(url)
-  }
 
   return (
     <div className="p-6">
@@ -126,7 +122,7 @@ export default function DataTablePage() {
           <button onClick={() => refetch()} className="btn-secondary flex items-center gap-2">
             <RefreshCw size={16} /> Làm mới
           </button>
-          <button onClick={goToUpload} className="btn-primary flex items-center gap-2">
+          <button onClick={() => setShowUpload(true)} className="btn-primary flex items-center gap-2">
             <Plus size={16} /> Tạo lô mới
           </button>
         </div>
@@ -242,7 +238,7 @@ export default function DataTablePage() {
                     <tr>
                       <td colSpan={8} className="text-center py-16 text-gray-400">
                         <p className="mb-3 text-base">Chưa có lô dữ liệu nào</p>
-                        <button onClick={goToUpload} className="btn-primary text-sm flex items-center gap-2 mx-auto">
+                        <button onClick={() => setShowUpload(true)} className="btn-primary text-sm flex items-center gap-2 mx-auto">
                           <Plus size={16} /> Tạo lô đầu tiên
                         </button>
                       </td>
@@ -270,6 +266,17 @@ export default function DataTablePage() {
           </>
         )}
       </div>
+
+      {/* Upload modal */}
+      {showUpload && (
+        <UploadModal
+          mappingId={mappingId}
+          dept={dept!}
+          table={table!}
+          sheetName={sheetName ?? table ?? ''}
+          onClose={() => setShowUpload(false)}
+        />
+      )}
     </div>
   )
 }
