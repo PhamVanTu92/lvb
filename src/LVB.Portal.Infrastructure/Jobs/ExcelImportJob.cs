@@ -73,11 +73,24 @@ public class ExcelImportJob
             {
                 var sheetName = worksheet.Name.Trim();
 
-                // 1. Exact sheet name match
+                // 1. Exact SheetName match (Vietnamese display name)
                 var mapping = mappings.FirstOrDefault(m =>
                     string.Equals(m.SheetName, sheetName, StringComparison.OrdinalIgnoreCase));
 
-                // 2. Fallback: match by column headers if sheet name is generic or unrecognised
+                // 2. Match by TableName (snake_case DB name — users sometimes name sheets this way)
+                mapping ??= mappings.FirstOrDefault(m =>
+                    string.Equals(m.TableName, sheetName, StringComparison.OrdinalIgnoreCase));
+
+                // 3. Normalised match: strip accents/spaces and compare lowercased
+                if (mapping == null)
+                {
+                    var normalised = NormaliseVietnamese(sheetName);
+                    mapping = mappings.FirstOrDefault(m =>
+                        string.Equals(NormaliseVietnamese(m.SheetName), normalised, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(NormaliseVietnamese(m.TableName), normalised, StringComparison.OrdinalIgnoreCase));
+                }
+
+                // 4. Fallback: match by column-header overlap
                 if (mapping == null)
                 {
                     var headerRow = worksheet.RowsUsed().FirstOrDefault();
@@ -92,10 +105,14 @@ public class ExcelImportJob
                             .Select(m =>
                             {
                                 var keys = TryParseKeys(m.ColumnMappingJson);
-                                var hits = keys.Count(k => excelHeaders.Contains(k));
-                                return (m, hits, keys.Length);
+                                // also check DB column names (values) in case headers are snake_case
+                                var vals = TryParseValues(m.ColumnMappingJson);
+                                var hits = keys.Count(k => excelHeaders.Contains(k))
+                                         + vals.Count(v => excelHeaders.Contains(v));
+                                var total = Math.Max(1, keys.Length);
+                                return (m, hits, total);
                             })
-                            .Where(x => x.hits > 0 && x.hits >= Math.Max(1, x.Length / 2))
+                            .Where(x => x.hits > 0 && x.hits >= Math.Max(1, x.total / 2))
                             .OrderByDescending(x => x.hits)
                             .Select(x => x.m)
                             .FirstOrDefault();
@@ -273,12 +290,34 @@ public class ExcelImportJob
 
     private static string[] TryParseKeys(string json)
     {
-        try
-        {
-            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-            return dict?.Keys.ToArray() ?? [];
-        }
+        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json)?.Keys.ToArray() ?? []; }
         catch { return []; }
+    }
+
+    private static string[] TryParseValues(string json)
+    {
+        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json)?.Values.ToArray() ?? []; }
+        catch { return []; }
+    }
+
+    /// <summary>
+    /// Strips Vietnamese diacritics + converts đ→d + lowercases + replaces non-alnum with _.
+    /// "Thu nhập ròng dịch vụ" → "thu_nhap_rong_dich_vu"
+    /// </summary>
+    private static string NormaliseVietnamese(string input)
+    {
+        var s = input.Trim().ToLowerInvariant();
+        s = s.Replace('đ', 'd').Replace('Đ', 'd');
+        var normalised = s.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in normalised)
+        {
+            var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            if (cat != System.Globalization.UnicodeCategory.NonSpacingMark)
+                sb.Append(c);
+        }
+        var result = sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+        return System.Text.RegularExpressions.Regex.Replace(result, @"[^a-z0-9]+", "_").Trim('_');
     }
 
     private async Task NotifyProgress(string sessionId, string status, int progress, string message)
