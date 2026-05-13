@@ -6,14 +6,66 @@ import { uploadApi } from '../../api/upload'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   ArrowLeft, Download, Trash2, Edit2, Check, X,
-  Search, ChevronLeft, ChevronRight, Filter, ClipboardList
+  Search, ChevronLeft, ChevronRight, Filter, ClipboardList, ChevronDown, ChevronUp
 } from 'lucide-react'
 import type { AuditLog } from '../../types'
 
-const AUDIT_ACTION_META: Record<string, { label: string; color: string }> = {
-  BATCH_CREATED: { label: 'Tạo lô',        color: 'bg-green-100 text-green-700' },
-  BATCH_UPDATED: { label: 'Cập nhật lô',   color: 'bg-blue-100 text-blue-700' },
-  BATCH_DELETED: { label: 'Xóa lô',        color: 'bg-red-100 text-red-700' },
+const AUDIT_ACTION_META: Record<string, { label: string; color: string; border: string }> = {
+  BATCH_CREATED: { label: 'Tạo lô',       color: 'text-green-700', border: 'border-green-200 hover:bg-green-50' },
+  BATCH_UPDATED: { label: 'Cập nhật lô',  color: 'text-blue-700',  border: 'border-blue-200  hover:bg-blue-50'  },
+  BATCH_DELETED: { label: 'Xóa lô',       color: 'text-red-700',   border: 'border-red-200   hover:bg-red-50'   },
+}
+
+// Single expandable audit entry — needs own state so must be a component
+function AuditEntry({ log }: { log: AuditLog }) {
+  const [open, setOpen] = useState(false)
+  const meta = AUDIT_ACTION_META[log.action] ?? {
+    label: log.action, color: 'text-gray-700', border: 'border-gray-200 hover:bg-gray-50',
+  }
+
+  // Parse details JSON into readable key/value pairs
+  let details: Record<string, unknown> = {}
+  try { details = JSON.parse(log.details ?? '{}') } catch { /* ignore */ }
+  const detailEntries = Object.entries(details).filter(([, v]) => v !== null && v !== '' && v !== undefined)
+  const hasDetails = detailEntries.length > 0
+
+  return (
+    <div>
+      <button
+        onClick={() => hasDetails && setOpen(o => !o)}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2 border rounded-lg transition-colors text-left ${meta.border} ${!hasDetails ? 'cursor-default' : ''}`}
+      >
+        <div className="min-w-0">
+          <span className={`text-xs font-semibold ${meta.color}`}>{meta.label}</span>
+          <p className="text-xs text-gray-500 mt-0.5 truncate">{log.username || '—'}</p>
+        </div>
+        <div className="flex flex-col items-end shrink-0">
+          <span className="text-xs text-gray-400">
+            {new Date(log.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </span>
+          <span className="text-xs text-gray-400">
+            {new Date(log.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+        {hasDetails && (
+          <span className={`shrink-0 ${meta.color}`}>
+            {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </span>
+        )}
+      </button>
+
+      {open && hasDetails && (
+        <div className="mt-1 border border-gray-100 rounded-lg px-3 py-2 bg-gray-50 text-xs space-y-1">
+          {detailEntries.map(([k, v]) => (
+            <div key={k} className="flex gap-2">
+              <span className="text-gray-400 shrink-0 w-24 truncate">{k.replace(/_/g, ' ')}</span>
+              <span className="text-gray-700 font-medium break-all">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -303,26 +355,8 @@ export default function BatchDetailPage() {
                 <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <ClipboardList size={12} /> Lịch sử thay đổi
                 </dt>
-                <div className="space-y-2">
-                  {auditLogs.map(log => {
-                    const meta = AUDIT_ACTION_META[log.action] ?? { label: log.action, color: 'bg-gray-100 text-gray-600' }
-                    return (
-                      <div key={log.id} className="flex items-start gap-2">
-                        <span className={`mt-0.5 text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${meta.color}`}>
-                          {meta.label}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs text-gray-600 font-medium">{log.username || '—'}</p>
-                          <p className="text-xs text-gray-400">
-                            {new Date(log.createdAt).toLocaleString('vi-VN', {
-                              day: '2-digit', month: '2-digit', year: 'numeric',
-                              hour: '2-digit', minute: '2-digit'
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
+                <div className="space-y-1.5">
+                  {auditLogs.map(log => <AuditEntry key={log.id} log={log} />)}
                 </div>
                 {isAdmin && (
                   <a href={`/admin/audit-logs`}
