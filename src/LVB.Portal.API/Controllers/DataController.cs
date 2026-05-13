@@ -11,8 +11,14 @@ namespace LVB.Portal.API.Controllers;
 public class DataController : ControllerBase
 {
     private readonly DataTableService _dataService;
+    private readonly LVB.Portal.Infrastructure.Services.AuditService _audit;
 
-    public DataController(DataTableService dataService) => _dataService = dataService;
+    public DataController(DataTableService dataService,
+        LVB.Portal.Infrastructure.Services.AuditService audit)
+    {
+        _dataService = dataService;
+        _audit = audit;
+    }
 
     /// <summary>Danh sách phòng ban và Data Table hiện có</summary>
     [HttpGet("departments")]
@@ -231,6 +237,9 @@ public class DataController : ControllerBase
         if (req.BatchName != null) session.BatchName = req.BatchName;
         if (req.Notes != null) session.Notes = req.Notes;
         await db.SaveChangesAsync();
+        await _audit.LogAsync("BATCH_UPDATED", "Batch", sessionId.ToString(),
+            session.BatchName ?? session.FileName,
+            new { batchName = req.BatchName, notes = req.Notes });
 
         return Ok(new { session.BatchName, session.Notes });
     }
@@ -271,9 +280,36 @@ public class DataController : ControllerBase
             }
         }
 
+        await _audit.LogAsync("BATCH_DELETED", "Batch", sessionId.ToString(),
+            session.BatchName ?? session.FileName,
+            new { rowCount = session.TotalRows, session.DepartmentCode, session.DataMonth });
         db.UploadSessions.Remove(session);
         await db.SaveChangesAsync();
         return NoContent();
+    }
+
+    /// <summary>Lịch sử thay đổi của một lô dữ liệu</summary>
+    [HttpGet("data/{dept}/{table}/batches/{sessionId:guid}/audit")]
+    [Authorize]
+    public async Task<IActionResult> GetBatchAudit(
+        string dept, string table, Guid sessionId,
+        [FromServices] LVB.Portal.Infrastructure.Data.AppDbContext db,
+        [FromQuery] int limit = 20)
+    {
+        var userDept = User.FindFirst("dept")?.Value;
+        if (!IsAdmin() && userDept != dept) return Forbid();
+
+        var logs = await db.AuditLogs
+            .Where(l => l.EntityId == sessionId.ToString())
+            .OrderByDescending(l => l.CreatedAt)
+            .Take(Math.Clamp(limit, 1, 100))
+            .Select(l => new {
+                l.Id, l.Action, l.Username, l.DepartmentCode,
+                l.Details, l.IpAddress, l.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(logs);
     }
 
     /// <summary>Health check</summary>

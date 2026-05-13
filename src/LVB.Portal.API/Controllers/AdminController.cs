@@ -17,12 +17,16 @@ public class AdminController : ControllerBase
     private readonly AppDbContext _db;
     private readonly PasswordService _passwordService;
     private readonly ILogger<AdminController> _logger;
+    private readonly LVB.Portal.Infrastructure.Services.AuditService _audit;
 
-    public AdminController(AppDbContext db, PasswordService passwordService, ILogger<AdminController> logger)
+    public AdminController(AppDbContext db, PasswordService passwordService,
+        ILogger<AdminController> logger,
+        LVB.Portal.Infrastructure.Services.AuditService audit)
     {
         _db = db;
         _passwordService = passwordService;
         _logger = logger;
+        _audit = audit;
     }
 
     /// <summary>Danh sách tất cả users</summary>
@@ -69,6 +73,8 @@ public class AdminController : ControllerBase
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
+        await _audit.LogAsync("USER_CREATED", "User", user.Id.ToString(), user.Username,
+            new { user.Role, user.DepartmentCode });
 
         return CreatedAtAction(nameof(GetUser), new { id = user.Id },
             new UserDto(user.Id, user.Username, user.FullName, user.Email,
@@ -101,6 +107,8 @@ public class AdminController : ControllerBase
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+        await _audit.LogAsync("USER_UPDATED", "User", id.ToString(), user.Username,
+            new { request.FullName, request.Email, Role = request.Role?.ToString(), request.IsActive });
         return NoContent();
     }
 
@@ -115,6 +123,7 @@ public class AdminController : ControllerBase
         user.LockedUntil = null;
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+        await _audit.LogAsync("PASSWORD_RESET", "User", id.ToString(), user.Username);
         return Ok(new { message = "Đặt lại mật khẩu thành công" });
     }
 
@@ -233,6 +242,8 @@ public class AdminController : ControllerBase
         };
         _db.SheetTableMappings.Add(mapping);
         await _db.SaveChangesAsync();
+        await _audit.LogAsync("DATASET_CREATED", "Dataset", mapping.Id.ToString(), mapping.SheetName,
+            new { mapping.TableName, mapping.DepartmentCode });
         return Ok(mapping);
     }
 
@@ -247,6 +258,8 @@ public class AdminController : ControllerBase
         mapping.ColumnMappingJson = request.ColumnMappingJson ?? mapping.ColumnMappingJson;
         mapping.IsActive = request.IsActive ?? mapping.IsActive;
         await _db.SaveChangesAsync();
+        await _audit.LogAsync("DATASET_UPDATED", "Dataset", id.ToString(), mapping.SheetName,
+            new { mapping.IsActive });
         return Ok(mapping);
     }
 
@@ -256,6 +269,7 @@ public class AdminController : ControllerBase
     {
         var mapping = await _db.SheetTableMappings.FindAsync(id);
         if (mapping == null) return NotFound();
+        await _audit.LogAsync("DATASET_DELETED", "Dataset", id.ToString(), mapping.SheetName);
         _db.SheetTableMappings.Remove(mapping);
         await _db.SaveChangesAsync();
         return NoContent();
@@ -335,6 +349,8 @@ public class AdminController : ControllerBase
         };
         _db.DatasetFields.Add(field);
         await _db.SaveChangesAsync();
+        await _audit.LogAsync("FIELD_CREATED", "DatasetField", field.Id.ToString(), field.DisplayName,
+            new { field.FieldName, field.FieldType, field.IsRequired, MappingId = req.MappingId });
         return Ok(new DatasetFieldDto(field.Id, field.MappingId, field.FieldName, field.DisplayName,
             field.FieldType, req.DropdownOptions, field.IsRequired, field.OrderIndex, field.IsActive));
     }
@@ -353,6 +369,8 @@ public class AdminController : ControllerBase
             : null;
         field.IsRequired = req.IsRequired;
         await _db.SaveChangesAsync();
+        await _audit.LogAsync("FIELD_UPDATED", "DatasetField", id.ToString(), field.DisplayName,
+            new { field.FieldName, field.FieldType, field.IsRequired });
         return Ok();
     }
 
@@ -362,9 +380,47 @@ public class AdminController : ControllerBase
     {
         var field = await _db.DatasetFields.FindAsync(id);
         if (field == null) return NotFound();
+        await _audit.LogAsync("FIELD_DELETED", "DatasetField", id.ToString(), field.DisplayName);
         _db.DatasetFields.Remove(field);
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    // ─── Audit Logs ────────────────────────────────────────────────────────
+
+    /// <summary>Nhật ký hoạt động hệ thống</summary>
+    [HttpGet("audit-logs")]
+    public async Task<IActionResult> GetAuditLogs(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? action = null,
+        [FromQuery] string? entityType = null,
+        [FromQuery] string? username = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] string? entityId = null)
+    {
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        var query = _db.AuditLogs.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(action))     query = query.Where(l => l.Action == action);
+        if (!string.IsNullOrWhiteSpace(entityType)) query = query.Where(l => l.EntityType == entityType);
+        if (!string.IsNullOrWhiteSpace(username))   query = query.Where(l => l.Username != null && l.Username.Contains(username));
+        if (!string.IsNullOrWhiteSpace(entityId))   query = query.Where(l => l.EntityId == entityId);
+        if (from.HasValue) query = query.Where(l => l.CreatedAt >= from.Value);
+        if (to.HasValue)   query = query.Where(l => l.CreatedAt <= to.Value.AddDays(1));
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderByDescending(l => l.CreatedAt)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(l => new {
+                l.Id, l.Action, l.EntityType, l.EntityId, l.EntityName,
+                l.Username, l.DepartmentCode, l.Details, l.IpAddress, l.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(new { Items = items, TotalCount = total, Page = page, PageSize = pageSize });
     }
 }
 
