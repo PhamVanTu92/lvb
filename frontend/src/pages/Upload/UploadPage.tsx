@@ -15,6 +15,9 @@ export default function UploadPage() {
   const [stage, setStage] = useState<Stage>('idle')
   const [file, setFile] = useState<File | null>(null)
   const [mappingId, setMappingId] = useState('')
+  const [batchName, setBatchName] = useState('')
+  const [dataMonth, setDataMonth] = useState('')
+  const [notes, setNotes] = useState('')
   const [uploadPct, setUploadPct] = useState(0)
   const [processPct, setProcessPct] = useState(0)
   const [processMsg, setProcessMsg] = useState('')
@@ -39,15 +42,17 @@ export default function UploadPage() {
     staleTime: 60_000,
   })
 
-  // Load existing session from query param
+  // Load existing session from query param, or pre-select mappingId
   useEffect(() => {
     const sid = searchParams.get('session')
+    const mid = searchParams.get('mappingId')
     if (sid) {
       uploadApi.getStatus(sid).then(r => {
         setSession(r.data)
         setStage('done')
       }).catch(() => {})
     }
+    if (mid) setMappingId(mid)
   }, [searchParams])
 
   // ── POLLING: reliable fallback, runs every 3s during processing ──────────
@@ -140,7 +145,17 @@ export default function UploadPage() {
     setStage('uploading')
     setError('')
     try {
-      const res = await uploadApi.upload(file, mappingId || undefined, setUploadPct)
+      // Format dataMonth from "YYYY-MM" to "MM/YYYY"
+      const dmFormatted = dataMonth
+        ? dataMonth.replace(/^(\d{4})-(\d{2})$/, '$2/$1')
+        : undefined
+      const res = await uploadApi.upload(
+        file, mappingId || undefined,
+        batchName || undefined,
+        dmFormatted,
+        notes || undefined,
+        setUploadPct
+      )
       const newSession = res.data
       setSession(newSession)
       setStage('processing')
@@ -175,6 +190,9 @@ export default function UploadPage() {
     stopTimer()
     setFile(null)
     setMappingId('')
+    setBatchName('')
+    setDataMonth('')
+    setNotes('')
     setStage('idle')
     setUploadPct(0)
     setProcessPct(0)
@@ -270,6 +288,44 @@ export default function UploadPage() {
             {!mappingId && mappingsData && mappingsData.length > 0 && (
               <p className="text-xs text-orange-500 mt-1">Vui lòng chọn loại dữ liệu để hệ thống biết lưu vào đâu</p>
             )}
+          </div>
+
+          {/* Batch metadata */}
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tên lô <span className="text-gray-400 font-normal">(tùy chọn)</span>
+              </label>
+              <input
+                type="text"
+                className="input text-sm"
+                placeholder="VD: TNR DV tháng 4/2026"
+                value={batchName}
+                onChange={e => setBatchName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tháng dữ liệu <span className="text-gray-400 font-normal">(tùy chọn)</span>
+              </label>
+              <input
+                type="month"
+                className="input text-sm"
+                value={dataMonth}
+                onChange={e => setDataMonth(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Ghi chú <span className="text-gray-400 font-normal">(tùy chọn)</span>
+            </label>
+            <textarea
+              className="input text-sm resize-none h-16"
+              placeholder="Ghi chú thêm về lô dữ liệu này..."
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+            />
           </div>
 
           <div className="mt-4 flex gap-3">

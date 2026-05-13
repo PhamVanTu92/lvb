@@ -290,10 +290,95 @@ public class AdminController : ControllerBase
         {
             k.Id, k.Name, k.Description, k.IsActive, k.CreatedAt, k.ExpiresAt, k.LastUsedAt
         }).ToListAsync());
+
+    /// <summary>Danh sách fields của một dataset</summary>
+    [HttpGet("dataset-fields/{mappingId:guid}")]
+    public async Task<IActionResult> GetDatasetFields(Guid mappingId)
+    {
+        var raw = await _db.DatasetFields
+            .Where(f => f.MappingId == mappingId && f.IsActive)
+            .OrderBy(f => f.OrderIndex)
+            .ToListAsync();
+
+        var fields = raw.Select(f => new DatasetFieldDto(
+            f.Id, f.MappingId, f.FieldName, f.DisplayName, f.FieldType,
+            f.DropdownOptionsJson != null
+                ? System.Text.Json.JsonSerializer.Deserialize<string[]>(f.DropdownOptionsJson)
+                : null,
+            f.IsRequired, f.OrderIndex, f.IsActive));
+
+        return Ok(fields);
+    }
+
+    /// <summary>Tạo field mới cho dataset</summary>
+    [HttpPost("dataset-fields")]
+    public async Task<IActionResult> CreateDatasetField([FromBody] CreateDatasetFieldRequest req)
+    {
+        var mapping = await _db.SheetTableMappings.FindAsync(req.MappingId);
+        if (mapping == null) return NotFound(new { message = "Dataset không tồn tại" });
+
+        var maxOrder = await _db.DatasetFields
+            .Where(f => f.MappingId == req.MappingId)
+            .MaxAsync(f => (int?)f.OrderIndex) ?? -1;
+
+        var field = new DatasetField
+        {
+            MappingId = req.MappingId,
+            FieldName = req.FieldName,
+            DisplayName = req.DisplayName,
+            FieldType = req.FieldType,
+            DropdownOptionsJson = req.DropdownOptions != null && req.DropdownOptions.Length > 0
+                ? System.Text.Json.JsonSerializer.Serialize(req.DropdownOptions)
+                : null,
+            IsRequired = req.IsRequired,
+            OrderIndex = maxOrder + 1
+        };
+        _db.DatasetFields.Add(field);
+        await _db.SaveChangesAsync();
+        return Ok(new DatasetFieldDto(field.Id, field.MappingId, field.FieldName, field.DisplayName,
+            field.FieldType, req.DropdownOptions, field.IsRequired, field.OrderIndex, field.IsActive));
+    }
+
+    /// <summary>Cập nhật field</summary>
+    [HttpPut("dataset-fields/{id:guid}")]
+    public async Task<IActionResult> UpdateDatasetField(Guid id, [FromBody] CreateDatasetFieldRequest req)
+    {
+        var field = await _db.DatasetFields.FindAsync(id);
+        if (field == null) return NotFound();
+        field.FieldName = req.FieldName;
+        field.DisplayName = req.DisplayName;
+        field.FieldType = req.FieldType;
+        field.DropdownOptionsJson = req.DropdownOptions != null && req.DropdownOptions.Length > 0
+            ? System.Text.Json.JsonSerializer.Serialize(req.DropdownOptions)
+            : null;
+        field.IsRequired = req.IsRequired;
+        await _db.SaveChangesAsync();
+        return Ok();
+    }
+
+    /// <summary>Xóa field</summary>
+    [HttpDelete("dataset-fields/{id:guid}")]
+    public async Task<IActionResult> DeleteDatasetField(Guid id)
+    {
+        var field = await _db.DatasetFields.FindAsync(id);
+        if (field == null) return NotFound();
+        _db.DatasetFields.Remove(field);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
 }
 
 public record ResetPasswordRequest([System.ComponentModel.DataAnnotations.Required,
     System.ComponentModel.DataAnnotations.MinLength(8)] string NewPassword);
+
+public record CreateDatasetFieldRequest(
+    Guid MappingId,
+    string FieldName,
+    string DisplayName,
+    string FieldType,
+    string[]? DropdownOptions,
+    bool IsRequired
+);
 
 public record CreateApiKeyRequest(
     [System.ComponentModel.DataAnnotations.Required] string Name,

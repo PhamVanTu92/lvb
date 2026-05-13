@@ -150,6 +150,90 @@ public class DataController : ControllerBase
         return Ok(mappings);
     }
 
+    /// <summary>Danh sách lô (batch list) của một dataset</summary>
+    [HttpGet("data/{dept}/{table}/batches")]
+    [Authorize]
+    public async Task<IActionResult> GetBatches(
+        string dept, string table,
+        [FromServices] LVB.Portal.Infrastructure.Data.AppDbContext db,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null,
+        [FromQuery] string? month = null,
+        [FromQuery] string? status = null)
+    {
+        if (dept == "_all" && !IsAdmin()) return Forbid();
+        var userDept = User.FindFirst("dept")?.Value;
+        if (!IsAdmin() && userDept != dept) return Forbid();
+
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = db.UploadSessions
+            .Include(s => s.Uploader)
+            .Include(s => s.SheetResults)
+            .Where(s => s.SheetResults.Any(r => r.MappedTableName == table))
+            .AsQueryable();
+
+        if (dept != "_all")
+            query = query.Where(s => s.DepartmentCode == dept);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.ToLower();
+            query = query.Where(s =>
+                (s.BatchName != null && s.BatchName.ToLower().Contains(q)) ||
+                (s.Notes != null && s.Notes.ToLower().Contains(q)) ||
+                (s.Uploader != null && s.Uploader.Username.ToLower().Contains(q)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(month))
+            query = query.Where(s => s.DataMonth == month);
+
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(s => s.Status.ToString() == status);
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderByDescending(s => s.UploadedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(s => new BatchListItemDto(
+                s.Id,
+                s.BatchName ?? s.FileName,
+                s.DataMonth,
+                s.Notes,
+                s.Uploader != null ? s.Uploader.FullName : "",
+                s.Uploader != null ? s.Uploader.Username : "",
+                s.TotalRows,
+                s.UploadedAt,
+                s.Status.ToString(),
+                s.FileName))
+            .ToListAsync();
+
+        return Ok(new BatchListResult(items, total, page, pageSize));
+    }
+
+    /// <summary>Cập nhật metadata của lô (tên, ghi chú)</summary>
+    [HttpPatch("data/{dept}/{table}/batches/{sessionId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> UpdateBatch(
+        string dept, string table, Guid sessionId,
+        [FromBody] UpdateBatchRequest req,
+        [FromServices] LVB.Portal.Infrastructure.Data.AppDbContext db)
+    {
+        var userDept = User.FindFirst("dept")?.Value;
+        if (!IsAdmin() && userDept != dept) return Forbid();
+
+        var session = await db.UploadSessions.FindAsync(sessionId);
+        if (session == null) return NotFound();
+
+        if (req.BatchName != null) session.BatchName = req.BatchName;
+        if (req.Notes != null) session.Notes = req.Notes;
+        await db.SaveChangesAsync();
+
+        return Ok(new { session.BatchName, session.Notes });
+    }
+
     /// <summary>Health check</summary>
     [HttpGet("health")]
     [AllowAnonymous]
@@ -162,3 +246,5 @@ public class DataController : ControllerBase
 
     private bool IsAdmin() => User.IsInRole("SystemAdmin");
 }
+
+public record UpdateBatchRequest(string? BatchName, string? Notes);

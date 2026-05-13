@@ -70,3 +70,35 @@ export interface Department {
   name: string
   tables?: TableInfo[]
 }
+
+export interface BatchListItem {
+  id: string
+  batchName: string
+  dataMonth?: string
+  notes?: string
+  uploaderName: string
+  uploaderUsername: string
+  rowCount: number
+  uploadedAt: string
+  status: string
+  fileName: string
+}
+
+export interface BatchListResult {
+  items: BatchListItem[]
+  totalCount: number
+  page: number
+  pageSize: number
+}
+
+export interface DatasetField {
+  id: string
+  mappingId: string
+  fieldName: string
+  displayName: string
+  fieldType: string
+  dropdownOptions?: string[]
+  isRequired: boolean
+  orderIndex: number
+  isActive: boolean
+}

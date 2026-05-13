@@ -21,7 +21,12 @@ public class UploadController : ControllerBase
     /// <summary>Upload file Excel mới</summary>
     [HttpPost]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100MB hard limit
-    public async Task<IActionResult> Upload(IFormFile file, [FromForm] Guid? mappingId = null)
+    public async Task<IActionResult> Upload(
+        IFormFile file,
+        [FromForm] Guid? mappingId = null,
+        [FromForm] string? batchName = null,
+        [FromForm] string? dataMonth = null,
+        [FromForm] string? notes = null)
     {
         if (file == null || file.Length == 0)
             return BadRequest(new { message = "Vui lòng chọn file" });
@@ -31,7 +36,7 @@ public class UploadController : ControllerBase
 
         using var stream = file.OpenReadStream();
         var (result, error) = await _uploadService.InitiateUploadAsync(
-            stream, file.FileName, file.Length, userId, deptCode, mappingId);
+            stream, file.FileName, file.Length, userId, deptCode, mappingId, batchName, dataMonth, notes);
 
         if (error != null) return BadRequest(new { message = error });
         return Accepted(result);

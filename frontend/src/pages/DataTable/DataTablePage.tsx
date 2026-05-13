@@ -1,67 +1,75 @@
-import { useState, useRef, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dataApi } from '../../api/data'
-import { Search, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Filter } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
+import {
+  Plus, RefreshCw, Eye, Trash2, Search, X,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+} from 'lucide-react'
+import type { BatchListItem } from '../../types'
 
-const QUICK_SIZES = [5, 10, 25, 50, 100, 200]
+const STATUS_OPTIONS = [
+  { value: '', label: 'Tất cả trạng thái' },
+  { value: 'Success', label: 'Hoàn tất' },
+  { value: 'Processing', label: 'Đang xử lý' },
+  { value: 'Failed', label: 'Thất bại' },
+]
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === 'Success')
+    return <span className="flex items-center gap-1 text-green-700 text-xs font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />HOÀN TẤT</span>
+  if (status === 'Processing')
+    return <span className="flex items-center gap-1 text-yellow-700 text-xs font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block" />ĐANG XỬ LÝ</span>
+  if (status === 'Failed')
+    return <span className="flex items-center gap-1 text-red-700 text-xs font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />THẤT BẠI</span>
+  return <span className="text-gray-400 text-xs">{status}</span>
+}
 
 export default function DataTablePage() {
   const { dept, table } = useParams<{ dept: string; table: string }>()
+  const navigate = useNavigate()
+  const { isAdmin } = useAuth()
+  const qc = useQueryClient()
 
   const { data: depts } = useQuery({
     queryKey: ['departments'],
     queryFn: () => dataApi.getDepartments().then(r => r.data),
     staleTime: 60_000,
   })
-  const sheetName = depts
-    ?.flatMap(d => d.tables ?? [])
-    .find(t => t.tableName === table)
-    ?.sheetName ?? table?.replace(/_/g, ' ')
+
+  // Get dataset info for display
+  const deptInfo = depts?.find(d => d.code === dept)
+  const sheetName = depts?.flatMap(d => d.tables ?? []).find(t => t.tableName === table)?.sheetName
+    ?? table?.replace(/_/g, ' ')
+
+  // Get mappingId for "Tạo lô mới" → upload page
+  const { data: mappingsData } = useQuery({
+    queryKey: ['sheet-mappings-upload'],
+    queryFn: () => dataApi.getSheetMappings().then(r => r.data),
+    staleTime: 60_000,
+  })
+  const mappingId = mappingsData?.find(m => m.tableName === table)?.id ?? ''
 
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(50)
-  const [pageSizeInput, setPageSizeInput] = useState('50')
+  const [pageSize, setPageSize] = useState(20)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({})
-  const [columnFilterInputs, setColumnFilterInputs] = useState<Record<string, string>>({})
-
-  // Debounce column filter changes
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const applyColumnFilter = useCallback((col: string, val: string) => {
-    setColumnFilterInputs(prev => ({ ...prev, [col]: val }))
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      setColumnFilters(prev => {
-        const next = { ...prev }
-        if (val.trim()) next[col] = val.trim()
-        else delete next[col]
-        return next
-      })
-      setPage(1)
-    }, 400)
-  }, [])
-
-  const applyPageSize = (val: number) => {
-    const clamped = Math.min(Math.max(val, 1), 500)
-    setPageSize(clamped)
-    setPageSizeInput(String(clamped))
-    setPage(1)
-  }
-
-  const hasFilters = !!search || Object.values(columnFilters).some(v => v)
+  const [filterMonth, setFilterMonth] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['table-data', dept, table, page, pageSize, search, columnFilters],
-    queryFn: () =>
-      dataApi.getData(
-        dept!, table!, page, pageSize,
-        search || undefined,
-        undefined,
-        Object.keys(columnFilters).length > 0 ? columnFilters : undefined
-      ).then(r => r.data),
+    queryKey: ['batches', dept, table, page, pageSize, search, filterMonth, filterStatus],
+    queryFn: () => dataApi.getBatches(
+      dept!, table!, page, pageSize,
+      search || undefined, filterMonth || undefined, filterStatus || undefined
+    ).then(r => r.data),
     enabled: !!dept && !!table,
+  })
+
+  const deleteBatch = useMutation({
+    mutationFn: (sessionId: string) => dataApi.deleteBatch(sessionId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['batches', dept, table] }),
   })
 
   const handleSearch = (e: React.FormEvent) => {
@@ -70,207 +78,173 @@ export default function DataTablePage() {
     setPage(1)
   }
 
-  const clearAllFilters = () => {
-    setSearch('')
-    setSearchInput('')
-    setColumnFilters({})
-    setColumnFilterInputs({})
-    setPage(1)
+  const totalPages = data ? Math.ceil(data.totalCount / pageSize) : 0
+
+  // Distinct months from loaded data for filter dropdown
+  const months = Array.from(new Set(data?.items?.map(i => i.dataMonth).filter(Boolean) ?? []))
+
+  const goToUpload = () => {
+    const url = mappingId
+      ? `/upload?mappingId=${mappingId}`
+      : `/upload?dept=${dept}&table=${table}`
+    navigate(url)
   }
-
-  const handleExport = async () => {
-    if (!data) return
-    const headers = data.columns.join(',') + '\n'
-    const rows = data.rows.map(row =>
-      data.columns.map(col => {
-        const v = row[col]
-        if (v == null) return ''
-        const s = String(v)
-        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
-      }).join(',')
-    ).join('\n')
-    const blob = new Blob(['﻿' + headers + rows], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${table}_${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const totalPages = data ? Math.ceil(data.totalRows / pageSize) : 0
-
-  const pageNumbers = (() => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1) as (number | '...')[]
-    const pages: (number | '...')[] = [1]
-    if (page > 3) pages.push('...')
-    for (let p = Math.max(2, page - 1); p <= Math.min(totalPages - 1, page + 1); p++) pages.push(p)
-    if (page < totalPages - 2) pages.push('...')
-    pages.push(totalPages)
-    return pages
-  })()
 
   return (
-    <div className="p-6 flex flex-col" style={{ height: 'calc(100vh - 64px)' }}>
+    <div className="p-6">
+      {/* Breadcrumb */}
+      <div className="text-xs text-gray-400 mb-2 flex items-center gap-1">
+        <span>DỮ LIỆU</span>
+        <span>/</span>
+        <span className="text-gray-600 font-medium">PHÂN HỆ {dept?.toUpperCase()}</span>
+      </div>
+
       {/* Header */}
-      <div className="flex items-start justify-between mb-4 flex-shrink-0">
+      <div className="flex items-start justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{sheetName}</h1>
-          <p className="text-gray-500 mt-1">
-            Phòng: <span className="font-medium">{dept === '_all' ? 'Tất cả phòng ban' : dept}</span>
-            {data && <span className="ml-3">• {data.totalRows.toLocaleString()} bản ghi</span>}
-            {data?.lastUpdated && (
-              <span className="ml-3">• Cập nhật: {new Date(data.lastUpdated).toLocaleDateString('vi-VN')}</span>
+          <div className="flex items-center flex-wrap gap-3 mt-2 text-sm text-gray-500">
+            <span>
+              Phòng <strong className="text-gray-700">{deptInfo?.name ?? dept}</strong>
+            </span>
+            {data && (
+              <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs font-medium">
+                {data.totalCount} lô upload
+              </span>
             )}
-          </p>
+            {data?.items?.[0] && (
+              <span>
+                Cập nhật{' '}
+                <strong className="text-gray-700">
+                  {new Date(data.items[0].uploadedAt).toLocaleDateString('vi-VN')}
+                </strong>
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <button onClick={() => refetch()} className="btn-secondary flex items-center gap-2">
             <RefreshCw size={16} /> Làm mới
           </button>
-          <button onClick={handleExport} className="btn-secondary flex items-center gap-2" disabled={!data}>
-            <Download size={16} /> Xuất CSV
+          <button onClick={goToUpload} className="btn-primary flex items-center gap-2">
+            <Plus size={16} /> Tạo lô mới
           </button>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-wrap gap-2 mb-3 items-center flex-shrink-0">
-        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-0">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
+        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-0 max-w-lg">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
             <input
               type="text"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              placeholder="Tìm kiếm toàn bộ..."
-              className="input pl-9 w-full"
+              placeholder="Tìm theo tên lô, người tạo, ghi chú..."
+              className="input pl-9 w-full text-sm"
             />
           </div>
-          <button type="submit" className="btn-primary">Tìm</button>
+          <button type="submit" className="btn-secondary text-sm px-3">Tìm</button>
           {search && (
-            <button type="button" onClick={() => { setSearch(''); setSearchInput(''); setPage(1) }} className="btn-secondary">
-              <X size={14} />
+            <button type="button" onClick={() => { setSearch(''); setSearchInput(''); setPage(1) }}
+              className="btn-secondary px-2"><X size={14} />
             </button>
           )}
         </form>
 
-        {hasFilters && (
-          <button
-            onClick={clearAllFilters}
-            className="flex items-center gap-1 text-sm px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-          >
-            <X size={14} /> Xóa tất cả bộ lọc
-          </button>
-        )}
+        <select value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(1) }}
+          className="input text-sm py-1.5" style={{ width: 'auto' }}>
+          <option value="">Tất cả tháng</option>
+          {months.map(m => <option key={m} value={m!}>{m}</option>)}
+        </select>
 
-        {/* Page size */}
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-sm text-gray-500 whitespace-nowrap">Số dòng:</span>
-          {/* Quick-select buttons */}
-          <div className="flex gap-1">
-            {QUICK_SIZES.map(s => (
-              <button
-                key={s}
-                onClick={() => applyPageSize(s)}
-                className={`px-2 py-1 text-xs rounded border transition-colors ${
-                  pageSize === s
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-          {/* Custom input */}
-          <input
-            type="number"
-            min={1}
-            max={500}
-            value={pageSizeInput}
-            onChange={e => setPageSizeInput(e.target.value)}
-            onBlur={() => {
-              const n = parseInt(pageSizeInput)
-              if (!isNaN(n) && n >= 1) applyPageSize(n)
-              else setPageSizeInput(String(pageSize))
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                const n = parseInt(pageSizeInput)
-                if (!isNaN(n) && n >= 1) applyPageSize(n)
-              }
-            }}
-            className="input py-1 text-sm text-center"
-            style={{ width: 64 }}
-            title="Nhập số dòng tùy chỉnh rồi nhấn Enter"
-          />
-        </div>
+        <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}
+          className="input text-sm py-1.5" style={{ width: 'auto' }}>
+          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+
+        <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+          className="input text-sm py-1.5 ml-auto" style={{ width: 'auto' }}>
+          {[10, 20, 50].map(s => <option key={s} value={s}>Hiển thị {s}</option>)}
+        </select>
       </div>
 
-      {/* Table — flex-1 to fill remaining height, scroll inside */}
-      <div className="card p-0 overflow-hidden flex flex-col flex-1 min-h-0">
+      {/* Table */}
+      <div className="card p-0 overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-16">
-            <svg className="animate-spin h-6 w-6 text-blue-600" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+            <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent" />
           </div>
-        ) : data ? (
+        ) : (
           <>
-            {/* Scrollable area — header sticky inside this container */}
-            <div className="overflow-auto flex-1 min-h-0">
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
-                  {/* Column names */}
-                  <tr className="border-b border-gray-200">
-                    {data.columns.map(col => (
-                      <th key={col} className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap uppercase text-xs tracking-wider bg-gray-50">
-                        {col}
-                      </th>
-                    ))}
-                  </tr>
-                  {/* Column filter row */}
-                  <tr className="border-b border-gray-200">
-                    {data.columns.map(col => (
-                      <th key={col} className="px-2 py-1.5 bg-blue-50/70">
-                        <div className="relative">
-                          <Filter className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={11} />
-                          <input
-                            type="text"
-                            value={columnFilterInputs[col] ?? ''}
-                            onChange={e => applyColumnFilter(col, e.target.value)}
-                            placeholder="Lọc..."
-                            className="w-full pl-6 pr-5 py-1 text-xs border border-gray-200 rounded bg-white focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 min-w-[80px]"
-                          />
-                          {columnFilterInputs[col] && (
-                            <button
-                              onClick={() => applyColumnFilter(col, '')}
-                              className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
-                            >
-                              <X size={10} />
-                            </button>
-                          )}
-                        </div>
-                      </th>
-                    ))}
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider w-24">Tháng</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Tên lô</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Người C.T.N</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider w-24">Bản ghi</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Ngày upload</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Trạng thái</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Ghi chú</th>
+                    <th className="w-16"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {data.rows.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50 transition-colors">
-                      {data.columns.map(col => (
-                        <td key={col} className="px-4 py-2.5 text-gray-700 whitespace-nowrap max-w-xs truncate">
-                          {row[col] != null ? String(row[col]) : <span className="text-gray-300">—</span>}
-                        </td>
-                      ))}
+                  {data?.items?.map((batch: BatchListItem) => (
+                    <tr
+                      key={batch.id}
+                      className="hover:bg-blue-50/40 cursor-pointer transition-colors"
+                      onClick={() => navigate(`/data/${dept}/${table}/${batch.id}`)}
+                    >
+                      <td className="px-4 py-3">
+                        {batch.dataMonth
+                          ? <span className="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">{batch.dataMonth}</span>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-blue-700">{batch.batchName}</td>
+                      <td className="px-4 py-3 text-gray-600">{batch.uploaderUsername}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-800">{batch.rowCount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">
+                        {new Date(batch.uploadedAt).toLocaleDateString('vi-VN')}{' '}
+                        {new Date(batch.uploadedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge status={batch.status} /></td>
+                      <td className="px-4 py-3 text-gray-400 text-xs max-w-[200px] truncate">{batch.notes || '—'}</td>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-0.5 justify-end">
+                          <button
+                            onClick={() => navigate(`/data/${dept}/${table}/${batch.id}`)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 rounded transition-colors"
+                            title="Xem chi tiết"
+                          >
+                            <Eye size={15} />
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Xóa lô "${batch.batchName}" sẽ xóa toàn bộ ${batch.rowCount.toLocaleString()} bản ghi. Tiếp tục?`))
+                                  deleteBatch.mutate(batch.id)
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+                              title="Xóa lô"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
-                  {data.rows.length === 0 && (
+                  {(!data?.items || data.items.length === 0) && (
                     <tr>
-                      <td colSpan={data.columns.length} className="text-center py-12 text-gray-400">
-                        {hasFilters ? 'Không tìm thấy kết quả phù hợp với bộ lọc hiện tại' : 'Không có dữ liệu'}
+                      <td colSpan={8} className="text-center py-16 text-gray-400">
+                        <p className="mb-3 text-base">Chưa có lô dữ liệu nào</p>
+                        <button onClick={goToUpload} className="btn-primary text-sm flex items-center gap-2 mx-auto">
+                          <Plus size={16} /> Tạo lô đầu tiên
+                        </button>
                       </td>
                     </tr>
                   )}
@@ -278,43 +252,22 @@ export default function DataTablePage() {
               </table>
             </div>
 
-            {/* Pagination — always visible at bottom */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 flex-wrap gap-2 flex-shrink-0 bg-white">
-              <p className="text-sm text-gray-500">
-                {data.totalRows > 0
-                  ? `${((page - 1) * pageSize + 1).toLocaleString()}–${Math.min(page * pageSize, data.totalRows).toLocaleString()} / ${data.totalRows.toLocaleString()} bản ghi`
-                  : 'Không có bản ghi'}
-              </p>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage(1)} disabled={page === 1} className="btn-secondary py-1 px-2 disabled:opacity-40">
-                  <ChevronsLeft size={15} />
-                </button>
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn-secondary py-1 px-2 disabled:opacity-40">
-                  <ChevronLeft size={15} />
-                </button>
-                {pageNumbers.map((p, i) =>
-                  p === '...'
-                    ? <span key={`e${i}`} className="px-1 text-gray-400 text-sm select-none">…</span>
-                    : <button
-                        key={p}
-                        onClick={() => setPage(p as number)}
-                        className={`py-1 px-3 rounded text-sm font-medium transition-colors ${page === p ? 'bg-blue-600 text-white' : 'btn-secondary'}`}
-                      >{p}</button>
-                )}
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn-secondary py-1 px-2 disabled:opacity-40">
-                  <ChevronRight size={15} />
-                </button>
-                <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="btn-secondary py-1 px-2 disabled:opacity-40">
-                  <ChevronsRight size={15} />
-                </button>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+                <p className="text-sm text-gray-500">
+                  Hiển thị {((page - 1) * pageSize + 1)}–{Math.min(page * pageSize, data?.totalCount ?? 0)} trong tổng {data?.totalCount} lô
+                </p>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(1)} disabled={page === 1} className="btn-secondary py-1 px-2 disabled:opacity-40"><ChevronsLeft size={14} /></button>
+                  <button onClick={() => setPage(p => p - 1)} disabled={page === 1} className="btn-secondary py-1 px-2 disabled:opacity-40"><ChevronLeft size={14} /></button>
+                  <span className="px-3 py-1 text-sm font-semibold text-blue-600">{page} / {totalPages}</span>
+                  <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages} className="btn-secondary py-1 px-2 disabled:opacity-40"><ChevronRight size={14} /></button>
+                  <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="btn-secondary py-1 px-2 disabled:opacity-40"><ChevronsRight size={14} /></button>
+                </div>
               </div>
-            </div>
+            )}
           </>
-        ) : (
-          <div className="text-center py-16 text-gray-400">
-            <p className="text-lg mb-1">Chưa có dữ liệu</p>
-            <p className="text-sm">Dataset này chưa có lần upload nào thành công. Vui lòng đẩy file Excel.</p>
-          </div>
         )}
       </div>
     </div>

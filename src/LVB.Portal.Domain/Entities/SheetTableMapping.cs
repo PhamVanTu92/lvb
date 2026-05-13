@@ -12,4 +12,5 @@ public class SheetTableMapping
     public string ColumnMappingJson { get; set; } = "{}";       // {"NGAY_SO_LIEU":"ngay_so_lieu",...}
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public ICollection<DatasetField> Fields { get; set; } = new List<DatasetField>();
 }

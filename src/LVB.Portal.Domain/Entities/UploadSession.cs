@@ -20,6 +20,9 @@ public class UploadSession
     public DateTime? CompletedAt { get; set; }
     public string? HangfireJobId { get; set; }
     public Guid? SelectedMappingId { get; set; }  // Dataset người dùng chọn khi upload
+    public string? BatchName { get; set; }    // e.g. "TNR DV tháng 4/2026"
+    public string? DataMonth { get; set; }   // e.g. "04/2026"
+    public string? Notes { get; set; }       // free text notes
 
     public Department? Department { get; set; }
     public User? Uploader { get; set; }

@@ -28,3 +28,35 @@ public record TableVersionDto(
     int TotalRows,
     string Status
 );
+
+public record BatchListItemDto(
+    Guid Id,
+    string BatchName,
+    string? DataMonth,
+    string? Notes,
+    string UploaderName,
+    string UploaderUsername,
+    int RowCount,
+    DateTime UploadedAt,
+    string Status,
+    string FileName
+);
+
+public record BatchListResult(
+    IEnumerable<BatchListItemDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize
+);
+
+public record DatasetFieldDto(
+    Guid Id,
+    Guid MappingId,
+    string FieldName,
+    string DisplayName,
+    string FieldType,
+    string[]? DropdownOptions,
+    bool IsRequired,
+    int OrderIndex,
+    bool IsActive
+);

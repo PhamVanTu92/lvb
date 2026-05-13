@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<UploadSheetResult> UploadSheetResults => Set<UploadSheetResult>();
     public DbSet<SheetTableMapping> SheetTableMappings => Set<SheetTableMapping>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+    public DbSet<DatasetField> DatasetFields => Set<DatasetField>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -88,6 +89,19 @@ public class AppDbContext : DbContext
             e.HasKey(k => k.Id);
             e.Property(k => k.KeyHash).HasMaxLength(500).IsRequired();
             e.Property(k => k.Name).HasMaxLength(200).IsRequired();
+        });
+
+        // DatasetField
+        modelBuilder.Entity<DatasetField>(e =>
+        {
+            e.HasKey(f => f.Id);
+            e.Property(f => f.FieldName).HasMaxLength(100).IsRequired();
+            e.Property(f => f.DisplayName).HasMaxLength(200).IsRequired();
+            e.Property(f => f.FieldType).HasMaxLength(50);
+            e.HasOne(f => f.Mapping)
+                .WithMany(m => m.Fields)
+                .HasForeignKey(f => f.MappingId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Seed default departments

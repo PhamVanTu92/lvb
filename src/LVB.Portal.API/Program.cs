@@ -331,6 +331,34 @@ static async Task EnsureSchemaAsync(AppDbContext db)
         -- Thêm cột mới nếu chưa có (idempotent ALTER)
         ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS selected_mapping_id UUID;
 
+        -- Batch metadata fields on upload_sessions
+        ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS batch_name VARCHAR(200);
+        ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS data_month VARCHAR(20);
+        ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS notes TEXT;
+
+        -- Dataset field schema definitions
+        CREATE TABLE IF NOT EXISTS dataset_fields (
+            id                    UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+            mapping_id            UUID         NOT NULL,
+            field_name            VARCHAR(100) NOT NULL,
+            display_name          VARCHAR(200) NOT NULL,
+            field_type            VARCHAR(50)  NOT NULL DEFAULT 'text',
+            dropdown_options_json TEXT,
+            is_required           BOOLEAN      NOT NULL DEFAULT false,
+            order_index           INTEGER      NOT NULL DEFAULT 0,
+            is_active             BOOLEAN      NOT NULL DEFAULT true,
+            created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        );
+
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_df_mapping') THEN
+                ALTER TABLE dataset_fields ADD CONSTRAINT fk_df_mapping
+                    FOREIGN KEY (mapping_id) REFERENCES sheet_table_mappings(id) ON DELETE CASCADE;
+            END IF;
+        END $$;
+
+        CREATE INDEX IF NOT EXISTS ix_df_mapping ON dataset_fields(mapping_id);
+
         -- Indexes
         CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users(username);
         CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email    ON users(email);

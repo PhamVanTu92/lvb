@@ -4,6 +4,7 @@ import LoginPage from './pages/Login/LoginPage'
 import DashboardPage from './pages/Dashboard/DashboardPage'
 import UploadPage from './pages/Upload/UploadPage'
 import DataTablePage from './pages/DataTable/DataTablePage'
+import BatchDetailPage from './pages/DataTable/BatchDetailPage'
 import AdminPage from './pages/Admin/AdminPage'
 import HistoryPage from './pages/History/HistoryPage'
 import HistoryDetailPage from './pages/History/HistoryDetailPage'
@@ -27,6 +28,7 @@ function AppRoutes() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="upload" element={<UploadPage />} />
         <Route path="data/:dept/:table" element={<DataTablePage />} />
+        <Route path="data/:dept/:table/:sessionId" element={<BatchDetailPage />} />
         <Route path="history" element={<HistoryPage />} />
         <Route path="history/:sessionId" element={<HistoryDetailPage />} />
         <Route path="help" element={<HelpPage />} />
