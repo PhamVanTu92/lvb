@@ -26,7 +26,8 @@ public class UploadController : ControllerBase
         [FromForm] Guid? mappingId = null,
         [FromForm] string? batchName = null,
         [FromForm] string? dataMonth = null,
-        [FromForm] string? notes = null)
+        [FromForm] string? notes = null,
+        [FromForm] string? metadataJson = null)
     {
         if (file == null || file.Length == 0)
             return BadRequest(new { message = "Vui lòng chọn file" });
@@ -36,7 +37,7 @@ public class UploadController : ControllerBase
 
         using var stream = file.OpenReadStream();
         var (result, error) = await _uploadService.InitiateUploadAsync(
-            stream, file.FileName, file.Length, userId, deptCode, mappingId, batchName, dataMonth, notes);
+            stream, file.FileName, file.Length, userId, deptCode, mappingId, batchName, dataMonth, notes, metadataJson);
 
         if (error != null) return BadRequest(new { message = error });
         return Accepted(result);

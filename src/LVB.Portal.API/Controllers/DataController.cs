@@ -207,7 +207,8 @@ public class DataController : ControllerBase
                 s.TotalRows,
                 s.UploadedAt,
                 s.Status.ToString(),
-                s.FileName))
+                s.FileName,
+                s.MetadataJson))
             .ToListAsync();
 
         return Ok(new BatchListResult(items, total, page, pageSize));
@@ -232,6 +233,47 @@ public class DataController : ControllerBase
         await db.SaveChangesAsync();
 
         return Ok(new { session.BatchName, session.Notes });
+    }
+
+    /// <summary>Xóa lô — admin hoặc chính người upload</summary>
+    [HttpDelete("data/{dept}/{table}/batches/{sessionId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteBatch(
+        string dept, string table, Guid sessionId,
+        [FromServices] LVB.Portal.Infrastructure.Data.AppDbContext db,
+        [FromServices] ILogger<DataController> logger)
+    {
+        var session = await db.UploadSessions
+            .Include(s => s.SheetResults)
+            .FirstOrDefaultAsync(s => s.Id == sessionId);
+
+        if (session == null) return NotFound();
+
+        // Kiểm tra quyền: admin hoặc chính người upload
+        var currentUserIdStr = User.FindFirst("sub")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!IsAdmin())
+        {
+            if (!Guid.TryParse(currentUserIdStr, out var currentUserId) || session.UploadedBy != currentUserId)
+                return Forbid();
+        }
+
+        // Xóa dữ liệu đã import từ các bảng động
+        foreach (var sr in session.SheetResults.Where(r => r.MappedTableName != null))
+        {
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    $"DELETE FROM {sr.MappedTableName} WHERE upload_session_id = '{sessionId}'");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not delete rows from {Table} for session {Id}", sr.MappedTableName, sessionId);
+            }
+        }
+
+        db.UploadSessions.Remove(session);
+        await db.SaveChangesAsync();
+        return NoContent();
     }
 
     /// <summary>Health check</summary>

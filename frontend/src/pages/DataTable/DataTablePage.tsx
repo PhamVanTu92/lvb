@@ -29,7 +29,7 @@ function StatusBadge({ status }: { status: string }) {
 export default function DataTablePage() {
   const { dept, table } = useParams<{ dept: string; table: string }>()
   const navigate = useNavigate()
-  const { isAdmin } = useAuth()
+  const { isAdmin, user } = useAuth()
   const qc = useQueryClient()
 
   const { data: depts } = useQuery({
@@ -68,7 +68,7 @@ export default function DataTablePage() {
   })
 
   const deleteBatch = useMutation({
-    mutationFn: (sessionId: string) => dataApi.deleteBatch(sessionId),
+    mutationFn: (sessionId: string) => dataApi.deleteBatch(dept!, table!, sessionId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['batches', dept, table] }),
   })
 
@@ -222,7 +222,7 @@ export default function DataTablePage() {
                           >
                             <Eye size={15} />
                           </button>
-                          {isAdmin && (
+                          {(isAdmin || user?.username === batch.uploaderUsername) && (
                             <button
                               onClick={() => {
                                 if (confirm(`Xóa lô "${batch.batchName}" sẽ xóa toàn bộ ${batch.rowCount.toLocaleString()} bản ghi. Tiếp tục?`))

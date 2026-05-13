@@ -82,6 +82,7 @@ export interface BatchListItem {
   uploadedAt: string
   status: string
   fileName: string
+  metadataJson?: string
 }
 
 export interface BatchListResult {

@@ -12,7 +12,15 @@
       "Bash(git push *)",
       "Bash(git commit -m 'fix: build errors in ExcelImportJob — unused variable + KeyCollection ?? [] incompatibility *)",
       "Read(//c/Users/Admin/OneDrive - FOXAI TECHNOLOGY JOINT STOCK COMPANY/Desktop/**)",
-      "Bash(python -c \"import sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); import os; [print\\(repr\\(f\\)\\) for f in os.listdir\\('.'\\)]\")"
+      "Bash(python -c \"import sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); import os; [print\\(repr\\(f\\)\\) for f in os.listdir\\('.'\\)]\")",
+      "Bash(Get-ChildItem -Path \"E:\\\\Project\\\\LAOVIETBANK\" -File -Depth 0)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(ConvertTo-Json)",
+      "Bash(git commit *)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet restore *)",
+      "Bash(npm run *)",
+      "Bash(cd /mnt/e/Project/LAOVIETBANK/frontend && npm run build 2>&1 | tail -50)"
     ]
   }
 }

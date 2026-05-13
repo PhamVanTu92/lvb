@@ -22,7 +22,7 @@ function StatusBadge({ status }: { status: string }) {
 export default function BatchDetailPage() {
   const { dept, table, sessionId } = useParams<{ dept: string; table: string; sessionId: string }>()
   const navigate = useNavigate()
-  const { isAdmin } = useAuth()
+  const { isAdmin, user } = useAuth()
   const qc = useQueryClient()
 
   // Dataset display name
@@ -88,10 +88,19 @@ export default function BatchDetailPage() {
     },
   })
 
+  const isOwner = user?.username === batch?.uploaderUsername
+  const canDelete = isAdmin || isOwner
+
   const deleteBatch = useMutation({
-    mutationFn: () => dataApi.deleteBatch(sessionId!),
+    mutationFn: () => dataApi.deleteBatch(dept!, table!, sessionId!),
     onSuccess: () => navigate(`/data/${dept}/${table}`),
   })
+
+  // Parse metadata JSON for display
+  const metadataFields: Record<string, string> = (() => {
+    try { return JSON.parse(batch?.metadataJson ?? '{}') } catch { return {} }
+  })()
+  const hasMetadata = Object.keys(metadataFields).length > 0
 
   const { data: tableData, isLoading: tableLoading } = useQuery({
     queryKey: ['batch-data', dept, table, sessionId, page, pageSize, search, columnFilters],
@@ -234,6 +243,19 @@ export default function BatchDetailPage() {
                 <dd className="font-bold text-gray-900 text-xl mt-0.5">{batch?.rowCount?.toLocaleString()}</dd>
               </div>
 
+              {/* Custom metadata fields */}
+              {hasMetadata && (
+                <div className="border-t border-gray-100 pt-3">
+                  <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Thông tin bổ sung</dt>
+                  {Object.entries(metadataFields).map(([k, v]) => v ? (
+                    <div key={k} className="mb-2">
+                      <dt className="text-xs text-gray-400">{k.replace(/_/g, ' ')}</dt>
+                      <dd className="font-medium text-gray-800 mt-0.5 text-sm">{v}</dd>
+                    </div>
+                  ) : null)}
+                </div>
+              )}
+
               {/* Notes */}
               <div>
                 <dt className="text-xs text-gray-400 mb-0.5">Ghi chú</dt>
@@ -271,7 +293,7 @@ export default function BatchDetailPage() {
                 className="btn-secondary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                 <Download size={14} /> Xuất CSV
               </button>
-              {isAdmin && (
+              {canDelete && (
                 <button
                   onClick={() => {
                     if (confirm(`Xóa lô "${displayName}" sẽ xóa vĩnh viễn toàn bộ ${batch?.rowCount?.toLocaleString()} bản ghi. Tiếp tục?`))

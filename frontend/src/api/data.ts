@@ -35,8 +35,8 @@ export const dataApi = {
   updateBatch: (dept: string, table: string, sessionId: string, data: { batchName?: string; notes?: string }) =>
     api.patch(`/data/${dept}/${table}/batches/${sessionId}`, data),
 
-  deleteBatch: (sessionId: string) =>
-    api.delete(`/admin/uploads/${sessionId}`),
+  deleteBatch: (dept: string, table: string, sessionId: string) =>
+    api.delete(`/data/${dept}/${table}/batches/${sessionId}`),
 
   getDatasetFields: (mappingId: string) =>
     api.get<DatasetField[]>(`/admin/dataset-fields/${mappingId}`),

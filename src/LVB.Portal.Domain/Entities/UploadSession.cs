@@ -23,6 +23,7 @@ public class UploadSession
     public string? BatchName { get; set; }    // e.g. "TNR DV tháng 4/2026"
     public string? DataMonth { get; set; }   // e.g. "04/2026"
     public string? Notes { get; set; }       // free text notes
+    public string? MetadataJson { get; set; } // custom field values from DatasetField schema (JSON)
 
     public Department? Department { get; set; }
     public User? Uploader { get; set; }

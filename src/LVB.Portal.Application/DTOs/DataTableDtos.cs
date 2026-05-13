@@ -39,7 +39,8 @@ public record BatchListItemDto(
     int RowCount,
     DateTime UploadedAt,
     string Status,
-    string FileName
+    string FileName,
+    string? MetadataJson
 );
 
 public record BatchListResult(

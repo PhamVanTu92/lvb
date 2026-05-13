@@ -335,6 +335,7 @@ static async Task EnsureSchemaAsync(AppDbContext db)
         ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS batch_name VARCHAR(200);
         ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS data_month VARCHAR(20);
         ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS notes TEXT;
+        ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS metadata_json TEXT;
 
         -- Dataset field schema definitions
         CREATE TABLE IF NOT EXISTS dataset_fields (

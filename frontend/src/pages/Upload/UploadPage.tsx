@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { uploadApi } from '../../api/upload'
 import { dataApi } from '../../api/data'
 import { Upload, FileSpreadsheet, X, CheckCircle, XCircle, Clock, Download, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
-import type { UploadSession } from '../../types'
+import type { DatasetField, UploadSession } from '../../types'
 
 type Stage = 'idle' | 'selected' | 'uploading' | 'processing' | 'done'
 
@@ -18,6 +18,8 @@ export default function UploadPage() {
   const [batchName, setBatchName] = useState('')
   const [dataMonth, setDataMonth] = useState('')
   const [notes, setNotes] = useState('')
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({})
   const [uploadPct, setUploadPct] = useState(0)
   const [processPct, setProcessPct] = useState(0)
   const [processMsg, setProcessMsg] = useState('')
@@ -41,6 +43,17 @@ export default function UploadPage() {
     queryFn: () => dataApi.getSheetMappings().then(r => r.data),
     staleTime: 60_000,
   })
+
+  // Khi chọn dataset, tải các trường khai báo
+  const { data: datasetFields } = useQuery({
+    queryKey: ['dataset-fields-upload', mappingId],
+    queryFn: () => dataApi.getDatasetFields(mappingId).then(r => r.data),
+    enabled: !!mappingId,
+    staleTime: 60_000,
+  })
+  const activeFields = (datasetFields ?? [])
+    .filter((f: DatasetField) => f.isActive)
+    .sort((a: DatasetField, b: DatasetField) => a.orderIndex - b.orderIndex)
 
   // Load existing session from query param, or pre-select mappingId
   useEffect(() => {
@@ -142,6 +155,20 @@ export default function UploadPage() {
   // ── UPLOAD ───────────────────────────────────────────────────────────────
   const handleUpload = async () => {
     if (!file) return
+
+    // Validate required custom fields
+    const errors: Record<string, boolean> = {}
+    for (const f of activeFields) {
+      if (f.isRequired && !fieldValues[f.fieldName]?.trim()) {
+        errors[f.fieldName] = true
+      }
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      return
+    }
+    setFieldErrors({})
+
     setStage('uploading')
     setError('')
     try {
@@ -149,12 +176,17 @@ export default function UploadPage() {
       const dmFormatted = dataMonth
         ? dataMonth.replace(/^(\d{4})-(\d{2})$/, '$2/$1')
         : undefined
+      // Build metadata JSON from declared fields
+      const metadataJson = activeFields.length > 0
+        ? JSON.stringify(Object.fromEntries(activeFields.map(f => [f.fieldName, fieldValues[f.fieldName] ?? ''])))
+        : undefined
       const res = await uploadApi.upload(
         file, mappingId || undefined,
         batchName || undefined,
         dmFormatted,
         notes || undefined,
-        setUploadPct
+        setUploadPct,
+        metadataJson
       )
       const newSession = res.data
       setSession(newSession)
@@ -193,6 +225,8 @@ export default function UploadPage() {
     setBatchName('')
     setDataMonth('')
     setNotes('')
+    setFieldValues({})
+    setFieldErrors({})
     setStage('idle')
     setUploadPct(0)
     setProcessPct(0)
@@ -290,7 +324,7 @@ export default function UploadPage() {
             )}
           </div>
 
-          {/* Batch metadata */}
+          {/* Standard batch metadata */}
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -328,7 +362,33 @@ export default function UploadPage() {
             />
           </div>
 
-          <div className="mt-4 flex gap-3">
+          {/* Dynamic fields declared for this dataset */}
+          {activeFields.length > 0 && (
+            <div className="mt-4 border-t border-gray-200 pt-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                Thông tin bổ sung
+                {activeFields.some(f => f.isRequired) && (
+                  <span className="text-red-500 ml-1">— có trường bắt buộc</span>
+                )}
+              </p>
+              <div className="space-y-3">
+                {activeFields.map(f => (
+                  <DeclaredField
+                    key={f.fieldName}
+                    field={f}
+                    value={fieldValues[f.fieldName] ?? ''}
+                    error={fieldErrors[f.fieldName]}
+                    onChange={v => {
+                      setFieldValues(prev => ({ ...prev, [f.fieldName]: v }))
+                      setFieldErrors(prev => ({ ...prev, [f.fieldName]: false }))
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 flex gap-3 items-center">
             <button
               onClick={handleUpload}
               disabled={!mappingId}
@@ -337,6 +397,11 @@ export default function UploadPage() {
               <Upload size={16} /> Xác nhận đẩy dữ liệu
             </button>
             <button onClick={handleReset} className="btn-secondary">Hủy</button>
+            {activeFields.some(f => f.isRequired) && (
+              <span className="text-xs text-gray-400">
+                <span className="text-red-500">*</span> Trường bắt buộc
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -473,6 +538,124 @@ export default function UploadPage() {
       {stage === 'idle' && (
         <UploadHistory />
       )}
+    </div>
+  )
+}
+
+// ── Renders a single declared DatasetField as a form input ──────────────────
+function DeclaredField({
+  field, value, error, onChange,
+}: {
+  field: DatasetField
+  value: string
+  error?: boolean
+  onChange: (v: string) => void
+}) {
+  const label = (
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {field.displayName}
+      {field.isRequired
+        ? <span className="text-red-500 ml-1">*</span>
+        : <span className="text-gray-400 font-normal ml-1">(tùy chọn)</span>}
+    </label>
+  )
+  const cls = `input text-sm${error ? ' border-red-400' : ''}`
+  const err = error && <p className="text-red-500 text-xs mt-1">Vui lòng điền trường này</p>
+
+  if (field.fieldType === 'dropdown') {
+    return (
+      <div>
+        {label}
+        <select className={cls} value={value} onChange={e => onChange(e.target.value)}>
+          <option value="">-- Chọn --</option>
+          {(field.dropdownOptions ?? []).map(opt => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+        {err}
+      </div>
+    )
+  }
+
+  if (field.fieldType === 'textarea') {
+    return (
+      <div>
+        {label}
+        <textarea className={`${cls} resize-none h-20`} value={value} onChange={e => onChange(e.target.value)} />
+        {err}
+      </div>
+    )
+  }
+
+  if (field.fieldType === 'month') {
+    return (
+      <div>
+        {label}
+        <input type="month" className={cls} value={value} onChange={e => onChange(e.target.value)} />
+        {err}
+      </div>
+    )
+  }
+
+  if (field.fieldType === 'date') {
+    return (
+      <div>
+        {label}
+        <input type="date" className={cls} value={value} onChange={e => onChange(e.target.value)} />
+        {err}
+      </div>
+    )
+  }
+
+  if (field.fieldType === 'quarter') {
+    // Store as "Q1/2026"
+    const [q, y] = value?.match(/^Q(\d)\/(\d{4})$/) ? [value.slice(1, 2), value.slice(3)] : ['', String(new Date().getFullYear())]
+    const setQ = (quarter: string, year: string) => onChange(quarter && year ? `Q${quarter}/${year}` : '')
+    return (
+      <div>
+        {label}
+        <div className="flex gap-2">
+          <select className={cls} style={{ flex: '0 0 auto', width: '110px' }} value={q}
+            onChange={e => setQ(e.target.value, y)}>
+            <option value="">-- Quý --</option>
+            {['1', '2', '3', '4'].map(n => <option key={n} value={n}>Quý {n}</option>)}
+          </select>
+          <input type="number" className={cls} style={{ flex: 1 }} placeholder="Năm"
+            value={y} min={2020} max={2099}
+            onChange={e => setQ(q, e.target.value)} />
+        </div>
+        {err}
+      </div>
+    )
+  }
+
+  if (field.fieldType === 'year') {
+    return (
+      <div>
+        {label}
+        <input type="number" className={cls} placeholder="VD: 2026" min={2020} max={2099}
+          value={value} onChange={e => onChange(e.target.value)} />
+        {err}
+      </div>
+    )
+  }
+
+  if (field.fieldType === 'number') {
+    return (
+      <div>
+        {label}
+        <input type="number" className={cls} value={value} onChange={e => onChange(e.target.value)} />
+        {err}
+      </div>
+    )
+  }
+
+  // Default: text
+  return (
+    <div>
+      {label}
+      <input type="text" className={cls} value={value} onChange={e => onChange(e.target.value)} />
+      {err}
     </div>
   )
 }
