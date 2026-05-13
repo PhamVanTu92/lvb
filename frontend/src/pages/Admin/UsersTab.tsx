@@ -109,6 +109,27 @@ export default function UsersTab() {
   )
 }
 
+function Field({ name, label, type = 'text', form, errors, onChange }: {
+  name: string; label: string; type?: string
+  form: Record<string, string>
+  errors: Record<string, string>
+  onChange: (field: string, value: string) => void
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input
+        className={`input ${errors[name] ? 'border-red-400 focus:ring-red-400' : ''}`}
+        type={type}
+        value={form[name]}
+        onChange={e => onChange(name, e.target.value)}
+        placeholder={label}
+      />
+      {errors[name] && <p className="text-red-500 text-xs mt-1">{errors[name]}</p>}
+    </div>
+  )
+}
+
 function CreateUserModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
@@ -169,20 +190,6 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
     create.mutate(form)
   }
 
-  const Field = ({ name, label, type = 'text' }: { name: string; label: string; type?: string }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      <input
-        className={`input ${errors[name] ? 'border-red-400 focus:ring-red-400' : ''}`}
-        type={type}
-        value={(form as Record<string, string>)[name]}
-        onChange={e => set(name, e.target.value)}
-        placeholder={label}
-      />
-      {errors[name] && <p className="text-red-500 text-xs mt-1">{errors[name]}</p>}
-    </div>
-  )
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
@@ -195,10 +202,10 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="space-y-4">
-          <Field name="username" label="Tên đăng nhập" />
-          <Field name="fullName" label="Họ và tên" />
-          <Field name="email" label="Email" type="email" />
-          <Field name="password" label="Mật khẩu" type="password" />
+          <Field name="username" label="Tên đăng nhập" form={form} errors={errors} onChange={set} />
+          <Field name="fullName" label="Họ và tên" form={form} errors={errors} onChange={set} />
+          <Field name="email" label="Email" type="email" form={form} errors={errors} onChange={set} />
+          <Field name="password" label="Mật khẩu" type="password" form={form} errors={errors} onChange={set} />
 
           {/* Vai trò */}
           <div>
