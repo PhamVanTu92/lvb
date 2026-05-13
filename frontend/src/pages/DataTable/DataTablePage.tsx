@@ -27,7 +27,7 @@ export default function DataTablePage() {
   const [columnFilterInputs, setColumnFilterInputs] = useState<Record<string, string>>({})
 
   // Debounce column filter changes
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const applyColumnFilter = useCallback((col: string, val: string) => {
     setColumnFilterInputs(prev => ({ ...prev, [col]: val }))
     clearTimeout(debounceRef.current)
