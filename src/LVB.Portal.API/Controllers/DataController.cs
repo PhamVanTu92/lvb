@@ -129,6 +129,26 @@ public class DataController : ControllerBase
         return Ok(versions);
     }
 
+    /// <summary>Danh sách dataset cho user hiện tại (dùng khi chọn dataset để upload)</summary>
+    [HttpGet("datasets")]
+    [Authorize]
+    public async Task<IActionResult> GetDatasets([FromServices] LVB.Portal.Infrastructure.Data.AppDbContext db)
+    {
+        var isAdmin = User.IsInRole("SystemAdmin");
+        var userDeptCode = User.FindFirst("dept")?.Value ?? "";
+
+        var mappings = await db.SheetTableMappings
+            .Where(m => m.IsActive && (
+                isAdmin ||
+                m.DepartmentCode == userDeptCode ||
+                m.DepartmentCode == ""))
+            .OrderBy(m => m.SheetName)
+            .Select(m => new { m.Id, m.SheetName, m.TableName, m.DepartmentCode })
+            .ToListAsync();
+
+        return Ok(mappings);
+    }
+
     /// <summary>Health check</summary>
     [HttpGet("health")]
     [AllowAnonymous]
