@@ -2,7 +2,9 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useSearchParams } from 'react-router-dom'
 import * as signalR from '@microsoft/signalr'
+import { useQuery } from '@tanstack/react-query'
 import { uploadApi } from '../../api/upload'
+import { dataApi } from '../../api/data'
 import { Upload, FileSpreadsheet, X, CheckCircle, XCircle, Clock, Download, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import type { UploadSession } from '../../types'
 
@@ -12,6 +14,7 @@ export default function UploadPage() {
   const [searchParams] = useSearchParams()
   const [stage, setStage] = useState<Stage>('idle')
   const [file, setFile] = useState<File | null>(null)
+  const [mappingId, setMappingId] = useState('')
   const [uploadPct, setUploadPct] = useState(0)
   const [processPct, setProcessPct] = useState(0)
   const [processMsg, setProcessMsg] = useState('')
@@ -22,6 +25,19 @@ export default function UploadPage() {
   const hubRef = useRef<signalR.HubConnection | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Danh sách dataset để chọn
+  const { data: depts } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => dataApi.getDepartments().then(r => r.data),
+    staleTime: 60_000,
+  })
+  // Lấy mapping IDs từ admin API
+  const { data: mappingsData } = useQuery({
+    queryKey: ['sheet-mappings-upload'],
+    queryFn: () => dataApi.getSheetMappings().then(r => r.data),
+    staleTime: 60_000,
+  })
 
   // Load existing session from query param
   useEffect(() => {
@@ -124,7 +140,7 @@ export default function UploadPage() {
     setStage('uploading')
     setError('')
     try {
-      const res = await uploadApi.upload(file, setUploadPct)
+      const res = await uploadApi.upload(file, mappingId || undefined, setUploadPct)
       const newSession = res.data
       setSession(newSession)
       setStage('processing')
@@ -158,6 +174,7 @@ export default function UploadPage() {
     stopPolling()
     stopTimer()
     setFile(null)
+    setMappingId('')
     setStage('idle')
     setUploadPct(0)
     setProcessPct(0)
@@ -225,8 +242,42 @@ export default function UploadPage() {
             </div>
             <button onClick={handleReset} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
           </div>
+
+          {/* Chọn dataset */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Đẩy vào dataset <span className="text-red-500">*</span>
+            </label>
+            {mappingsData && mappingsData.length > 0 ? (
+              <select
+                className={`input ${!mappingId ? 'border-orange-300' : 'border-green-400'}`}
+                value={mappingId}
+                onChange={e => setMappingId(e.target.value)}
+              >
+                <option value="">-- Chọn loại dữ liệu --</option>
+                {mappingsData.filter(m => m.isActive).map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.sheetName}
+                    {m.departmentCode ? ` (${m.departmentCode})` : ' (Tất cả phòng ban)'}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg p-2">
+                Chưa có dataset nào được khai báo. Vui lòng vào <strong>Admin → Khai báo Dataset</strong> trước.
+              </p>
+            )}
+            {!mappingId && mappingsData && mappingsData.length > 0 && (
+              <p className="text-xs text-orange-500 mt-1">Vui lòng chọn loại dữ liệu để hệ thống biết lưu vào đâu</p>
+            )}
+          </div>
+
           <div className="mt-4 flex gap-3">
-            <button onClick={handleUpload} className="btn-primary flex items-center gap-2">
+            <button
+              onClick={handleUpload}
+              disabled={!mappingId}
+              className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <Upload size={16} /> Xác nhận đẩy dữ liệu
             </button>
             <button onClick={handleReset} className="btn-secondary">Hủy</button>

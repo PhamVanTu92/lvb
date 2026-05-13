@@ -78,13 +78,23 @@ public class ExcelImportJob
             {
                 var sheetName = worksheet.Name.Trim();
 
-                // Tìm mapping: tên sheet → tên bảng → header cột → mapping duy nhất của dept
-                var mapping = mappings.FirstOrDefault(m =>
-                        string.Equals(m.SheetName, sheetName, StringComparison.OrdinalIgnoreCase))
-                    ?? mappings.FirstOrDefault(m =>
-                        string.Equals(m.TableName, sheetName, StringComparison.OrdinalIgnoreCase))
-                    ?? FindMappingByHeaders(worksheet, mappings)
-                    ?? (mappings.Count == 1 ? mappings[0] : null);
+                // Nếu người dùng đã chọn dataset cụ thể → dùng luôn, không auto-detect
+                SheetTableMapping? mapping;
+                if (session.SelectedMappingId.HasValue)
+                {
+                    mapping = mappings.FirstOrDefault(m => m.Id == session.SelectedMappingId.Value)
+                           ?? mappings.FirstOrDefault(); // fallback nếu mapping bị xóa
+                }
+                else
+                {
+                    // Auto-detect: tên sheet → tên bảng → header cột → mapping duy nhất
+                    mapping = mappings.FirstOrDefault(m =>
+                            string.Equals(m.SheetName, sheetName, StringComparison.OrdinalIgnoreCase))
+                        ?? mappings.FirstOrDefault(m =>
+                            string.Equals(m.TableName, sheetName, StringComparison.OrdinalIgnoreCase))
+                        ?? FindMappingByHeaders(worksheet, mappings)
+                        ?? (mappings.Count == 1 ? mappings[0] : null);
+                }
 
                 var sheetResult = new UploadSheetResult
                 {

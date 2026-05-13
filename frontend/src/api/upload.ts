@@ -2,9 +2,10 @@ import api from './client'
 import type { PagedResult, UploadSession } from '../types'
 
 export const uploadApi = {
-  upload: (file: File, onProgress?: (pct: number) => void) => {
+  upload: (file: File, mappingId?: string, onProgress?: (pct: number) => void) => {
     const form = new FormData()
     form.append('file', file)
+    if (mappingId) form.append('mappingId', mappingId)
     return api.post<UploadSession>('/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (e) => {

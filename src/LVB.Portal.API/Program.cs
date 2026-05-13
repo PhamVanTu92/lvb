@@ -293,7 +293,8 @@ static async Task EnsureSchemaAsync(AppDbContext db)
             total_rows       INTEGER       NOT NULL DEFAULT 0,
             processed_rows   INTEGER       NOT NULL DEFAULT 0,
             completed_at     TIMESTAMPTZ,
-            hangfire_job_id  TEXT
+            hangfire_job_id       TEXT,
+            selected_mapping_id   UUID
         );
 
         CREATE TABLE IF NOT EXISTS upload_sheet_results (
@@ -326,6 +327,9 @@ static async Task EnsureSchemaAsync(AppDbContext db)
                     FOREIGN KEY (upload_session_id) REFERENCES upload_sessions(id) ON DELETE CASCADE;
             END IF;
         END $$;
+
+        -- Thêm cột mới nếu chưa có (idempotent ALTER)
+        ALTER TABLE upload_sessions ADD COLUMN IF NOT EXISTS selected_mapping_id UUID;
 
         -- Indexes
         CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users(username);

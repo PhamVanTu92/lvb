@@ -16,4 +16,9 @@ export const dataApi = {
     api.get(`/data/${dept}/${table}`, {
       params: { page: 1, pageSize: 10000 },
     }),
+
+  getSheetMappings: () =>
+    api.get<{ id: string; sheetName: string; tableName: string; departmentCode: string; isActive: boolean }[]>(
+      '/admin/sheet-mappings'
+    ),
 }

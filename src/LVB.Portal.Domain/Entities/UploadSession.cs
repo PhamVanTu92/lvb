@@ -19,6 +19,7 @@ public class UploadSession
     public int ProcessedRows { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? HangfireJobId { get; set; }
+    public Guid? SelectedMappingId { get; set; }  // Dataset người dùng chọn khi upload
 
     public Department? Department { get; set; }
     public User? Uploader { get; set; }

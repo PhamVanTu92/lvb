@@ -34,7 +34,7 @@ public class UploadService
     }
 
     public async Task<(UploadSessionDto? Result, string? Error)> InitiateUploadAsync(
-        Stream fileStream, string fileName, long fileSize, Guid userId, string deptCode)
+        Stream fileStream, string fileName, long fileSize, Guid userId, string deptCode, Guid? mappingId = null)
     {
         // Validate file size
         var maxMB = int.Parse(_config["Upload:MaxFileSizeMB"] ?? "50");
@@ -60,7 +60,8 @@ public class UploadService
             FileSizeBytes = fileSize,
             DepartmentCode = deptCode,
             UploadedBy = userId,
-            Status = UploadStatus.Pending
+            Status = UploadStatus.Pending,
+            SelectedMappingId = mappingId
         };
 
         _db.UploadSessions.Add(session);
