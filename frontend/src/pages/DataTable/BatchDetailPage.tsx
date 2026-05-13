@@ -147,6 +147,8 @@ export default function BatchDetailPage() {
     },
   })
 
+  const [showAudit, setShowAudit] = useState(false)
+
   const isOwner = user?.username === batch?.uploaderUsername
   const canDelete = isAdmin || isOwner
 
@@ -349,45 +351,37 @@ export default function BatchDetailPage() {
               </div>
             </dl>
 
-            {/* Audit trail */}
-            {auditLogs && auditLogs.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <ClipboardList size={12} /> Lịch sử thay đổi
-                </dt>
-                <div className="space-y-1.5">
-                  {auditLogs.map(log => <AuditEntry key={log.id} log={log} />)}
-                </div>
-                {isAdmin && (
-                  <a href={`/admin/audit-logs`}
-                    className="mt-2 text-xs text-blue-500 hover:underline block">
-                    Xem toàn bộ nhật ký →
-                  </a>
-                )}
-              </div>
-            )}
-
             {/* Actions */}
             <div className="mt-5 pt-4 border-t border-gray-100 space-y-2">
-              <button onClick={handleDownload}
-                className="btn-secondary w-full text-sm flex items-center justify-center gap-2">
-                <Download size={14} /> Tải file gốc
-              </button>
-              <button onClick={handleExportCSV} disabled={!tableData}
-                className="btn-secondary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-                <Download size={14} /> Xuất CSV
-              </button>
-              {canDelete && (
-                <button
-                  onClick={() => {
-                    if (confirm(`Xóa lô "${displayName}" sẽ xóa vĩnh viễn toàn bộ ${batch?.rowCount?.toLocaleString()} bản ghi. Tiếp tục?`))
-                      deleteBatch.mutate()
-                  }}
-                  className="w-full text-sm flex items-center justify-center gap-2 px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                  <Trash2 size={14} /> Xóa lô
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={handleDownload}
+                  className="btn-secondary text-sm flex items-center justify-center gap-1.5">
+                  <Download size={14} /> Tải file gốc
                 </button>
-              )}
+                <button onClick={handleExportCSV} disabled={!tableData}
+                  className="btn-secondary text-sm flex items-center justify-center gap-1.5 disabled:opacity-50">
+                  <Download size={14} /> Xuất CSV
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setShowAudit(true)}
+                  className="text-sm flex items-center justify-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <ClipboardList size={14} /> Audit log
+                </button>
+                {canDelete ? (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Xóa lô "${displayName}" sẽ xóa vĩnh viễn toàn bộ ${batch?.rowCount?.toLocaleString()} bản ghi. Tiếp tục?`))
+                        deleteBatch.mutate()
+                    }}
+                    className="text-sm flex items-center justify-center gap-1.5 px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 size={14} /> Xóa lô
+                  </button>
+                ) : <div />}
+              </div>
             </div>
           </div>
         </div>
@@ -508,6 +502,56 @@ export default function BatchDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Audit log modal ── */}
+      {showAudit && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowAudit(false)} />
+
+          {/* Slide-in panel */}
+          <div className="relative w-96 bg-white shadow-2xl flex flex-col h-full overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <ClipboardList size={15} className="text-gray-500" /> Audit log
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[270px]">{displayName}</p>
+              </div>
+              <button onClick={() => setShowAudit(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              {!auditLogs ? (
+                <div className="flex justify-center py-10">
+                  <div className="animate-spin h-5 w-5 rounded-full border-2 border-blue-600 border-t-transparent" />
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Chưa có lịch sử thay đổi</div>
+              ) : (
+                <div className="space-y-2">
+                  {auditLogs.map(log => <AuditEntry key={log.id} log={log} />)}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {isAdmin && (
+              <div className="px-5 py-3 border-t border-gray-100 flex-shrink-0">
+                <a href="/admin/audit-logs"
+                  className="text-xs text-blue-500 hover:underline flex items-center gap-1">
+                  Xem toàn bộ nhật ký hệ thống →
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
