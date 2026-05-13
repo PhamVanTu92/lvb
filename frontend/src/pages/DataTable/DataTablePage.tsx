@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { dataApi } from '../../api/data'
 import { Search, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Filter } from 'lucide-react'
 
-const PAGE_SIZE_OPTIONS = [25, 50, 100, 200]
+const QUICK_SIZES = [5, 10, 25, 50, 100, 200]
 
 export default function DataTablePage() {
   const { dept, table } = useParams<{ dept: string; table: string }>()
@@ -21,6 +21,7 @@ export default function DataTablePage() {
 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
+  const [pageSizeInput, setPageSizeInput] = useState('50')
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({})
@@ -42,8 +43,12 @@ export default function DataTablePage() {
     }, 400)
   }, [])
 
-  // Reset page when filters change
-  useEffect(() => { setPage(1) }, [search])
+  const applyPageSize = (val: number) => {
+    const clamped = Math.min(Math.max(val, 1), 500)
+    setPageSize(clamped)
+    setPageSizeInput(String(clamped))
+    setPage(1)
+  }
 
   const hasFilters = !!search || Object.values(columnFilters).some(v => v)
 
@@ -106,9 +111,9 @@ export default function DataTablePage() {
   })()
 
   return (
-    <div className="p-6 max-w-full">
+    <div className="p-6 flex flex-col" style={{ height: 'calc(100vh - 64px)' }}>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-4 flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{sheetName}</h1>
           <p className="text-gray-500 mt-1">
@@ -130,7 +135,7 @@ export default function DataTablePage() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap gap-2 mb-4 items-center">
+      <div className="flex flex-wrap gap-2 mb-3 items-center flex-shrink-0">
         <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-0">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
@@ -161,20 +166,50 @@ export default function DataTablePage() {
 
         {/* Page size */}
         <div className="flex items-center gap-2 ml-auto">
-          <span className="text-sm text-gray-500 whitespace-nowrap">Số dòng / trang:</span>
-          <select
-            value={pageSize}
-            onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-            className="input py-1.5 text-sm"
-            style={{ width: 'auto' }}
-          >
-            {PAGE_SIZE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <span className="text-sm text-gray-500 whitespace-nowrap">Số dòng:</span>
+          {/* Quick-select buttons */}
+          <div className="flex gap-1">
+            {QUICK_SIZES.map(s => (
+              <button
+                key={s}
+                onClick={() => applyPageSize(s)}
+                className={`px-2 py-1 text-xs rounded border transition-colors ${
+                  pageSize === s
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          {/* Custom input */}
+          <input
+            type="number"
+            min={1}
+            max={500}
+            value={pageSizeInput}
+            onChange={e => setPageSizeInput(e.target.value)}
+            onBlur={() => {
+              const n = parseInt(pageSizeInput)
+              if (!isNaN(n) && n >= 1) applyPageSize(n)
+              else setPageSizeInput(String(pageSize))
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const n = parseInt(pageSizeInput)
+                if (!isNaN(n) && n >= 1) applyPageSize(n)
+              }
+            }}
+            className="input py-1 text-sm text-center"
+            style={{ width: 64 }}
+            title="Nhập số dòng tùy chỉnh rồi nhấn Enter"
+          />
         </div>
       </div>
 
-      {/* Table */}
-      <div className="card p-0 overflow-hidden">
+      {/* Table — flex-1 to fill remaining height, scroll inside */}
+      <div className="card p-0 overflow-hidden flex flex-col flex-1 min-h-0">
         {isLoading ? (
           <div className="flex justify-center py-16">
             <svg className="animate-spin h-6 w-6 text-blue-600" viewBox="0 0 24 24" fill="none">
@@ -184,21 +219,22 @@ export default function DataTablePage() {
           </div>
         ) : data ? (
           <>
-            <div className="overflow-x-auto">
+            {/* Scrollable area — header sticky inside this container */}
+            <div className="overflow-auto flex-1 min-h-0">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
                   {/* Column names */}
-                  <tr>
+                  <tr className="border-b border-gray-200">
                     {data.columns.map(col => (
-                      <th key={col} className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap uppercase text-xs tracking-wider">
+                      <th key={col} className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap uppercase text-xs tracking-wider bg-gray-50">
                         {col}
                       </th>
                     ))}
                   </tr>
                   {/* Column filter row */}
-                  <tr className="bg-blue-50/60 border-b border-gray-200">
+                  <tr className="border-b border-gray-200">
                     {data.columns.map(col => (
-                      <th key={col} className="px-2 py-1.5">
+                      <th key={col} className="px-2 py-1.5 bg-blue-50/70">
                         <div className="relative">
                           <Filter className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={11} />
                           <input
@@ -242,39 +278,37 @@ export default function DataTablePage() {
               </table>
             </div>
 
-            {/* Pagination */}
-            {totalPages > 0 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 flex-wrap gap-2">
-                <p className="text-sm text-gray-500">
-                  {data.totalRows > 0
-                    ? `${((page - 1) * pageSize + 1).toLocaleString()}–${Math.min(page * pageSize, data.totalRows).toLocaleString()} / ${data.totalRows.toLocaleString()} bản ghi`
-                    : 'Không có bản ghi'}
-                </p>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setPage(1)} disabled={page === 1} className="btn-secondary py-1 px-2 disabled:opacity-40">
-                    <ChevronsLeft size={15} />
-                  </button>
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn-secondary py-1 px-2 disabled:opacity-40">
-                    <ChevronLeft size={15} />
-                  </button>
-                  {pageNumbers.map((p, i) =>
-                    p === '...'
-                      ? <span key={`e${i}`} className="px-1 text-gray-400 text-sm select-none">…</span>
-                      : <button
-                          key={p}
-                          onClick={() => setPage(p as number)}
-                          className={`py-1 px-3 rounded text-sm font-medium transition-colors ${page === p ? 'bg-blue-600 text-white' : 'btn-secondary'}`}
-                        >{p}</button>
-                  )}
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn-secondary py-1 px-2 disabled:opacity-40">
-                    <ChevronRight size={15} />
-                  </button>
-                  <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="btn-secondary py-1 px-2 disabled:opacity-40">
-                    <ChevronsRight size={15} />
-                  </button>
-                </div>
+            {/* Pagination — always visible at bottom */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 flex-wrap gap-2 flex-shrink-0 bg-white">
+              <p className="text-sm text-gray-500">
+                {data.totalRows > 0
+                  ? `${((page - 1) * pageSize + 1).toLocaleString()}–${Math.min(page * pageSize, data.totalRows).toLocaleString()} / ${data.totalRows.toLocaleString()} bản ghi`
+                  : 'Không có bản ghi'}
+              </p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage(1)} disabled={page === 1} className="btn-secondary py-1 px-2 disabled:opacity-40">
+                  <ChevronsLeft size={15} />
+                </button>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn-secondary py-1 px-2 disabled:opacity-40">
+                  <ChevronLeft size={15} />
+                </button>
+                {pageNumbers.map((p, i) =>
+                  p === '...'
+                    ? <span key={`e${i}`} className="px-1 text-gray-400 text-sm select-none">…</span>
+                    : <button
+                        key={p}
+                        onClick={() => setPage(p as number)}
+                        className={`py-1 px-3 rounded text-sm font-medium transition-colors ${page === p ? 'bg-blue-600 text-white' : 'btn-secondary'}`}
+                      >{p}</button>
+                )}
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn-secondary py-1 px-2 disabled:opacity-40">
+                  <ChevronRight size={15} />
+                </button>
+                <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="btn-secondary py-1 px-2 disabled:opacity-40">
+                  <ChevronsRight size={15} />
+                </button>
               </div>
-            )}
+            </div>
           </>
         ) : (
           <div className="text-center py-16 text-gray-400">
