@@ -46,10 +46,16 @@ public class DataTableService
 
         var totalRows = await ExecuteCountAsync(countSql);
         var rows = await ExecuteQueryAsync(dataSql);
-        var columns = rows.FirstOrDefault()?.Keys.Where(k => k != "id" && k != "upload_session_id") ?? [];
+        // Always hide internal system columns; for "_all" keep dept_code so admin can see the source dept
+        var hiddenCols = new HashSet<string> { "id", "upload_session_id", "created_at" };
+        if (request.DepartmentCode != "_all") hiddenCols.Add("dept_code");
+        var columns = rows.FirstOrDefault()?.Keys.Where(k => !hiddenCols.Contains(k)) ?? [];
 
+        // "_all" = no dept filter for admin; find latest session across all depts
+        var isAllDepts = request.DepartmentCode == "_all";
         var lastSession = await _db.UploadSessions
-            .Where(s => s.DepartmentCode == request.DepartmentCode && s.Status == Domain.Enums.UploadStatus.Success)
+            .Where(s => (isAllDepts || s.DepartmentCode == request.DepartmentCode)
+                     && s.Status == Domain.Enums.UploadStatus.Success)
             .OrderByDescending(s => s.CompletedAt)
             .FirstOrDefaultAsync();
 
@@ -57,7 +63,7 @@ public class DataTableService
             request.TableName,
             request.DepartmentCode,
             columns,
-            rows.Select(r => r.Where(kv => kv.Key != "id" && kv.Key != "upload_session_id")
+            rows.Select(r => r.Where(kv => !hiddenCols.Contains(kv.Key))
                 .ToDictionary(kv => kv.Key, kv => kv.Value)),
             totalRows,
             request.Page,
@@ -91,19 +97,28 @@ public class DataTableService
 
     private string BuildCountSql(string table, string dept, Guid? sessionId, string? search)
     {
-        var where = $"WHERE dept_code = '{dept.Replace("'", "''")}' ";
-        if (sessionId.HasValue)
-            where += $"AND upload_session_id = '{sessionId}'";
+        var conditions = BuildConditions(dept, sessionId);
+        var where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
         return $"SELECT COUNT(*) FROM {table} {where}";
     }
 
     private string BuildDataSql(string table, string dept, Guid? sessionId, string? search, int page, int pageSize)
     {
-        var where = $"WHERE dept_code = '{dept.Replace("'", "''")}' ";
-        if (sessionId.HasValue)
-            where += $"AND upload_session_id = '{sessionId}'";
+        var conditions = BuildConditions(dept, sessionId);
+        var where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
         var offset = (page - 1) * pageSize;
         return $"SELECT * FROM {table} {where} ORDER BY id LIMIT {pageSize} OFFSET {offset}";
+    }
+
+    private static List<string> BuildConditions(string dept, Guid? sessionId)
+    {
+        var conditions = new List<string>();
+        // "_all" means no department filter (admin viewing global dataset)
+        if (!string.IsNullOrEmpty(dept) && dept != "_all")
+            conditions.Add($"dept_code = '{dept.Replace("'", "''")}'");
+        if (sessionId.HasValue)
+            conditions.Add($"upload_session_id = '{sessionId}'");
+        return conditions;
     }
 
     private async Task<int> ExecuteCountAsync(string sql)

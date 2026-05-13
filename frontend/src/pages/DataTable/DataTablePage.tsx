@@ -63,7 +63,7 @@ export default function DataTablePage() {
             {sheetName}
           </h1>
           <p className="text-gray-500 mt-1">
-            Phòng: <span className="font-medium">{dept}</span>
+            Phòng: <span className="font-medium">{dept === '_all' ? 'Tất cả phòng ban' : dept}</span>
             {data && <span className="ml-3">• {data.totalRows.toLocaleString()} bản ghi</span>}
             {data?.lastUpdated && (
               <span className="ml-3">• Cập nhật: {new Date(data.lastUpdated).toLocaleDateString('vi-VN')}</span>

@@ -51,7 +51,7 @@ export default function DatasetMappingsTab() {
   })
 
   const deptName = (code: string) =>
-    departments?.find(d => d.code === code)?.name ?? code
+    code === '' ? '🌐 Tất cả phòng ban' : (departments?.find(d => d.code === code)?.name ?? code)
 
   return (
     <div>

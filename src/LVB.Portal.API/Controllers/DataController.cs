@@ -22,23 +22,62 @@ public class DataController : ControllerBase
         var isAdmin = User.IsInRole("SystemAdmin");
         var userDeptCode = User.FindFirst("dept")?.Value ?? "";
 
-        // Non-admin users only see their own department
-        var depts = await db.Departments
-            .Where(d => d.IsActive && (isAdmin || d.Code == userDeptCode))
-            .Select(d => new { d.Code, d.Name })
+        var allMappings = await db.SheetTableMappings
+            .Where(m => m.IsActive)
             .ToListAsync();
 
         var result = new List<object>();
-        foreach (var dept in depts)
+
+        if (isAdmin)
         {
-            var tables = await _dataService.GetAvailableTablesAsync(dept.Code);
-            result.Add(new
+            // Global datasets (DepartmentCode == "") → appear once under virtual "_all" dept
+            var globalTables = allMappings
+                .Where(m => m.DepartmentCode == "")
+                .GroupBy(m => m.TableName)
+                .Select(g => new { g.First().TableName, g.First().SheetName })
+                .ToList();
+
+            if (globalTables.Count > 0)
+                result.Add(new { Code = "_all", Name = "Chung", Tables = globalTables });
+
+            // Dept-specific datasets → under their respective dept
+            var depts = await db.Departments
+                .Where(d => d.IsActive)
+                .Select(d => new { d.Code, d.Name })
+                .ToListAsync();
+
+            foreach (var dept in depts)
             {
-                dept.Code,
-                dept.Name,
-                Tables = tables.Select(t => new { t.TableName, t.SheetName })
-            });
+                var tables = allMappings
+                    .Where(m => m.DepartmentCode == dept.Code)
+                    .GroupBy(m => m.TableName)
+                    .Select(g => new { g.First().TableName, g.First().SheetName })
+                    .ToList();
+
+                if (tables.Count > 0)
+                    result.Add(new { dept.Code, dept.Name, Tables = tables });
+            }
         }
+        else
+        {
+            // Non-admin: their own dept + global datasets combined, no duplicates
+            var dept = await db.Departments
+                .Where(d => d.IsActive && d.Code == userDeptCode)
+                .Select(d => new { d.Code, d.Name })
+                .FirstOrDefaultAsync();
+
+            if (dept != null)
+            {
+                var tables = allMappings
+                    .Where(m => m.DepartmentCode == userDeptCode || m.DepartmentCode == "")
+                    .GroupBy(m => m.TableName)
+                    .Select(g => new { g.First().TableName, g.First().SheetName })
+                    .ToList();
+
+                result.Add(new { dept.Code, dept.Name, Tables = tables });
+            }
+        }
+
         return Ok(result);
     }
 
@@ -52,6 +91,9 @@ public class DataController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] Guid? sessionId = null)
     {
+        // "_all" = global dataset, admin only
+        if (dept == "_all" && !IsAdmin()) return Forbid();
+
         // Kiểm tra quyền: user chỉ xem dept của mình, admin xem tất cả
         var userDept = User.FindFirst("dept")?.Value;
         if (!IsAdmin() && userDept != dept)
