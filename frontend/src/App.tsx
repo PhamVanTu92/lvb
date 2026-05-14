@@ -10,6 +10,9 @@ import HistoryPage from './pages/History/HistoryPage'
 import HistoryDetailPage from './pages/History/HistoryDetailPage'
 import HelpPage from './pages/Help/HelpPage'
 import Layout from './components/common/Layout'
+import ReportListPage from './pages/Reports/ReportListPage'
+import ReportRunPage from './pages/Reports/ReportRunPage'
+import ReportBuilderPage from './pages/Reports/ReportBuilderPage'
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { isAuthenticated, isAdmin } = useAuth()
@@ -32,6 +35,9 @@ function AppRoutes() {
         <Route path="history" element={<HistoryPage />} />
         <Route path="history/:sessionId" element={<HistoryDetailPage />} />
         <Route path="help" element={<HelpPage />} />
+        <Route path="reports" element={<ReportListPage />} />
+        <Route path="reports/:id" element={<ReportRunPage />} />
+        <Route path="reports/builder/:id" element={<ProtectedRoute adminOnly><ReportBuilderPage /></ProtectedRoute>} />
         <Route path="admin/*" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" />} />
