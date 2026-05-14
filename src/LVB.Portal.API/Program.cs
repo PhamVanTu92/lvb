@@ -414,7 +414,7 @@ static async Task EnsureSchemaAsync(AppDbContext db)
             name             TEXT         NOT NULL,
             description      TEXT,
             department_code  TEXT,
-            config_json      TEXT         NOT NULL DEFAULT '{}',
+            config_json      TEXT         NOT NULL DEFAULT '{{}}',
             created_by       UUID,
             created_by_name  TEXT,
             created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
