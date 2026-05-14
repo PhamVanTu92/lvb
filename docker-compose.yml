@@ -4,6 +4,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: lvb_postgres
+    networks:
+      - lvb_net
     environment:
       POSTGRES_DB: lvb_portal
       POSTGRES_USER: lvb_user
@@ -22,6 +24,8 @@ services:
   minio:
     image: minio/minio:latest
     container_name: lvb_minio
+    networks:
+      - lvb_net
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: lvb_minio_admin
@@ -41,6 +45,8 @@ services:
   minio-init:
     image: minio/mc:latest
     container_name: lvb_minio_init
+    networks:
+      - lvb_net
     depends_on:
       minio:
         condition: service_healthy
@@ -56,6 +62,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: lvb_redis
+    networks:
+      - lvb_net
     ports:
       - "6399:6379"
     volumes:
@@ -73,6 +81,8 @@ services:
       context: .
       dockerfile: src/LVB.Portal.API/Dockerfile
     container_name: lvb_backend
+    networks:
+      - lvb_net
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
@@ -109,9 +119,15 @@ services:
       - "4000:80"
     depends_on:
       - backend
+    networks:
+      - lvb_net
     restart: unless-stopped
 
 volumes:
   postgres_data:
   minio_data:
   redis_data:
+
+networks:
+  lvb_net:
+    driver: bridge
