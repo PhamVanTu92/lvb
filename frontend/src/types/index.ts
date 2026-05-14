@@ -105,6 +105,41 @@ export interface AuditLog {
   createdAt: string
 }
 
+// ── Report Builder ───────────────────────────────────────────────────────────
+export interface RTable { alias: string; tableName: string }
+export interface RJoin  { type: string; left: string; right: string }
+export interface RSelect { ref: string; agg?: string; displayName: string }
+export interface RFilter { ref: string; op: string; paramName: string; displayName: string; paramType: string }
+export interface ROrderBy { ref: string; agg?: string; desc: boolean }
+export interface RChart  { type: string; xField: string; yFields: string[] }
+
+export interface ReportConfig {
+  tables: RTable[]
+  joins?: RJoin[]
+  select: RSelect[]
+  groupBy?: string[]
+  filters?: RFilter[]
+  orderBy?: ROrderBy[]
+  chart?: RChart
+}
+
+export interface ReportListItem {
+  id: string; name: string; description?: string; departmentCode?: string
+  createdAt: string; updatedAt: string; isActive: boolean; orderIndex: number; createdByName?: string
+}
+
+export interface ReportDetail extends ReportListItem {
+  configJson: string
+}
+
+export interface ReportRunResult {
+  columns: string[]
+  rows: Record<string, unknown>[]
+  totalCount: number
+  page: number
+  pageSize: number
+}
+
 export interface DatasetField {
   id: string
   mappingId: string

@@ -1,5 +1,5 @@
 import api from './client'
-import type { AuditLog, BatchListResult, DatasetField, DataTableResult, Department, PagedResult } from '../types'
+import type { AuditLog, BatchListResult, DatasetField, DataTableResult, Department, PagedResult, ReportListItem, ReportDetail, ReportRunResult } from '../types'
 
 export const dataApi = {
   getDepartments: () => api.get<Department[]>('/departments'),
@@ -61,4 +61,26 @@ export const dataApi = {
 
   getBatchAudit: (dept: string, table: string, sessionId: string, limit = 20) =>
     api.get<AuditLog[]>(`/data/${dept}/${table}/batches/${sessionId}/audit`, { params: { limit } }),
+
+  // ── Reports ──────────────────────────────────────────────────────────────
+  getReports: () =>
+    api.get<ReportListItem[]>('/reports'),
+
+  getReport: (id: string) =>
+    api.get<ReportDetail>(`/reports/${id}`),
+
+  runReport: (id: string, params: Record<string, string>, page = 1, pageSize = 50) =>
+    api.get<ReportRunResult>(`/reports/${id}/run`, { params: { page, pageSize, ...params } }),
+
+  createReport: (data: { name: string; description?: string; departmentCode?: string; configJson: string; orderIndex?: number }) =>
+    api.post<ReportDetail>('/admin/reports', data),
+
+  updateReport: (id: string, data: { name?: string; description?: string; departmentCode?: string; configJson?: string; isActive?: boolean; orderIndex?: number }) =>
+    api.put(`/admin/reports/${id}`, data),
+
+  deleteReport: (id: string) =>
+    api.delete(`/admin/reports/${id}`),
+
+  getTableColumns: (tableName: string) =>
+    api.get<string[]>(`/admin/tables/${tableName}/columns`),
 }

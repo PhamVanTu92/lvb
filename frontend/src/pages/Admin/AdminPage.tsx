@@ -1,10 +1,11 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { Users, Building2, Key, Database, ClipboardList } from 'lucide-react'
+import { Users, Building2, Key, Database, ClipboardList, BookOpen } from 'lucide-react'
 import UsersTab from './UsersTab'
 import DepartmentsTab from './DepartmentsTab'
 import ApiKeysTab from './ApiKeysTab'
 import DatasetMappingsTab from './DatasetMappingsTab'
 import AuditLogsTab from './AuditLogsTab'
+import ApiDocsPage from './ApiDocsPage'
 
 export default function AdminPage() {
   const tabClass = ({ isActive }: { isActive: boolean }) =>
@@ -31,6 +32,9 @@ export default function AdminPage() {
         <NavLink to="/admin/audit-logs" className={tabClass}>
           <ClipboardList size={16} /> Nhật ký
         </NavLink>
+        <NavLink to="/admin/api-docs" className={tabClass}>
+          <BookOpen size={16} /> Tài liệu API
+        </NavLink>
       </div>
       <Routes>
         <Route path="users" element={<UsersTab />} />
@@ -38,6 +42,7 @@ export default function AdminPage() {
         <Route path="datasets" element={<DatasetMappingsTab />} />
         <Route path="api-keys" element={<ApiKeysTab />} />
         <Route path="audit-logs" element={<AuditLogsTab />} />
+        <Route path="api-docs" element={<ApiDocsPage />} />
         <Route index element={<UsersTab />} />
       </Routes>
     </div>

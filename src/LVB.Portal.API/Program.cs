@@ -107,6 +107,7 @@ builder.Services.AddScoped<DataTableService>();
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<ExcelImportJob>();
+builder.Services.AddScoped<ReportService>();
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 builder.Services.AddCors(opts =>
@@ -128,18 +129,33 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "LVB Portal API",
         Version = "v1",
-        Description = "Cổng thông tin nội bộ Ngân hàng LaoViet"
+        Description = """
+            Cổng thông tin nội bộ Ngân hàng LaoViet.
+
+            ## Xác thực
+            - **JWT Bearer**: dành cho người dùng đăng nhập qua portal.
+            - **X-Api-Key header**: dành cho hệ thống bên ngoài (iTitan, v.v.).
+              Lấy API Key tại Admin → API Keys (iTitan).
+
+            ## Endpoint dành cho tích hợp ngoài
+            Các endpoint được đánh dấu **ApiKeyOrJwt** đều chấp nhận cả JWT lẫn API Key.
+            """,
+        Contact = new OpenApiContact { Name = "LVB IT Dept", Email = "it@lvbank.com" }
     });
+
+    // JWT
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.Http, Scheme = "bearer",
-        BearerFormat = "JWT", Description = "Nhập JWT token"
+        BearerFormat = "JWT", Description = "Nhập JWT token (đăng nhập portal)"
     });
+    // API Key
     c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.ApiKey, In = ParameterLocation.Header,
-        Name = "X-Api-Key", Description = "API Key cho iTitan integration"
+        Name = "X-Api-Key", Description = "API Key cho tích hợp hệ thống ngoài"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -148,8 +164,20 @@ builder.Services.AddSwaggerGen(c =>
                 Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
             },
             []
+        },
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "ApiKey" }
+            },
+            []
         }
     });
+
+    // Load XML comments
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath)) c.IncludeXmlComments(xmlPath);
 });
 
 // ── Build App ─────────────────────────────────────────────────────────────────
@@ -379,6 +407,23 @@ static async Task EnsureSchemaAsync(AppDbContext db)
         END $$;
 
         CREATE INDEX IF NOT EXISTS ix_df_mapping ON dataset_fields(mapping_id);
+
+        -- Visual Report Builder
+        CREATE TABLE IF NOT EXISTS reports (
+            id               UUID         PRIMARY KEY,
+            name             TEXT         NOT NULL,
+            description      TEXT,
+            department_code  TEXT,
+            config_json      TEXT         NOT NULL DEFAULT '{}',
+            created_by       UUID,
+            created_by_name  TEXT,
+            created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            is_active        BOOLEAN      NOT NULL DEFAULT TRUE,
+            order_index      INT          NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_reports_dept   ON reports(department_code);
+        CREATE INDEX IF NOT EXISTS idx_reports_active ON reports(is_active);
 
         -- Indexes
         CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users(username);

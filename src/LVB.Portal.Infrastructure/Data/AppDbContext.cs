@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<DatasetField> DatasetFields => Set<DatasetField>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Report> Reports => Set<Report>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -103,6 +104,18 @@ public class AppDbContext : DbContext
                 .WithMany(m => m.Fields)
                 .HasForeignKey(f => f.MappingId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Report
+        modelBuilder.Entity<Report>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Name).HasMaxLength(300).IsRequired();
+            e.Property(r => r.DepartmentCode).HasMaxLength(50);
+            e.Property(r => r.ConfigJson).HasColumnType("text").IsRequired();
+            e.Property(r => r.CreatedByName).HasMaxLength(200);
+            e.HasIndex(r => r.DepartmentCode);
+            e.HasIndex(r => r.IsActive);
         });
 
         // AuditLog

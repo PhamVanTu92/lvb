@@ -20,7 +20,15 @@
       "Bash(dotnet build *)",
       "Bash(dotnet restore *)",
       "Bash(npm run *)",
-      "Bash(cd /mnt/e/Project/LAOVIETBANK/frontend && npm run build 2>&1 | tail -50)"
+      "Bash(cd /mnt/e/Project/LAOVIETBANK/frontend && npm run build 2>&1 | tail -50)",
+      "Bash(npx tsc *)",
+      "Bash(git -C \"E:/Project/LAOVIETBANK\" add frontend/src/pages/DataTable/BatchDetailPage.tsx)",
+      "Bash(git -C E:/Project/LAOVIETBANK commit -m ' *)",
+      "Bash(git -C \"E:/Project/LAOVIETBANK\" push)",
+      "Bash(git -C \"E:/Project/LAOVIETBANK\" add frontend/src/pages/DataTable/UploadModal.tsx frontend/src/pages/DataTable/DataTablePage.tsx)",
+      "Bash(git -C \"E:/Project/LAOVIETBANK\" add frontend/nginx.conf nginx-proxy/lvb.foxai.com.vn.conf)",
+      "Bash(npm install *)",
+      "Bash(git -C \"E:/Project/LAOVIETBANK\" add -A)"
     ]
   }
 }
