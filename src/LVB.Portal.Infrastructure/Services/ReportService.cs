@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using LVB.Portal.Application.DTOs;
 using LVB.Portal.Infrastructure.Data;
 using Microsoft.AspNetCore.Http;
@@ -37,8 +38,12 @@ public class ReportService
     private static readonly HashSet<string> AllowedJoinTypes =
         new(StringComparer.OrdinalIgnoreCase) { "INNER", "LEFT", "RIGHT", "FULL" };
 
-    private static readonly System.Text.RegularExpressions.Regex IdentifierRegex =
-        new(@"^[a-z][a-z0-9_]{0,99}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly Regex IdentifierRegex =
+        new(@"^[a-z][a-z0-9_]{0,99}$", RegexOptions.Compiled);
+
+    // Matches :param_name placeholders in raw SQL (e.g. :from_date, :to_date)
+    private static readonly Regex ParamPlaceholderRegex =
+        new(@":([a-z][a-z0-9_]*)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -73,6 +78,10 @@ public class ReportService
 
         var config = DeserializeConfig(configJson);
 
+        // Route: raw SQL mode bypasses the visual builder entirely
+        if (!string.IsNullOrWhiteSpace(config.RawSql))
+            return await RunRawSqlAsync(config, queryParams, page, pageSize);
+
         // Build the core query (everything except LIMIT / OFFSET)
         var (coreSql, parameters) = await BuildCoreSqlAsync(config, queryParams);
 
@@ -102,6 +111,104 @@ public class ReportService
         // Execute data
         var columns = new List<string>();
         var rows = new List<Dictionary<string, object?>>();
+
+        await using (var dataCmd = conn.CreateCommand())
+        {
+            dataCmd.CommandText = dataSql;
+            AddParameters(dataCmd, parameters);
+
+            await using var reader = await dataCmd.ExecuteReaderAsync();
+            for (int i = 0; i < reader.FieldCount; i++)
+                columns.Add(reader.GetName(i));
+
+            while (await reader.ReadAsync())
+            {
+                var row = new Dictionary<string, object?>(reader.FieldCount);
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    var val = reader.GetValue(i);
+                    row[columns[i]] = val == DBNull.Value ? null : val;
+                }
+                rows.Add(row);
+            }
+        }
+
+        return new ReportRunResult(columns, rows, totalCount, page, pageSize);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Raw SQL execution
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Executes a raw PostgreSQL query stored in config.RawSql.
+    ///
+    /// Parameter injection:
+    ///   The SQL may contain :param_name placeholders.  For each unique placeholder
+    ///   (in order of first appearance) a NpgsqlParameter named param_name is created
+    ///   and its value is taken from the HTTP query string.  If the caller did not
+    ///   supply a value for a placeholder, NULL is bound (so the SQL can handle it
+    ///   with COALESCE / IS NULL checks).
+    ///
+    /// Pagination:
+    ///   The original SQL is wrapped as
+    ///     SELECT COUNT(*) FROM (...original...) _cnt
+    ///     SELECT * FROM (...original...) _data LIMIT n OFFSET m
+    /// </summary>
+    private async Task<ReportRunResult> RunRawSqlAsync(
+        ReportConfig config,
+        IQueryCollection queryParams,
+        int page,
+        int pageSize)
+    {
+        var rawSql = config.RawSql!.Trim();
+
+        // Collect distinct :param_name placeholders (preserve first-appearance order)
+        var seenParams = new LinkedList<string>(); // ordered, unique
+        var seenSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (Match m in ParamPlaceholderRegex.Matches(rawSql))
+        {
+            var pName = m.Groups[1].Value.ToLower();
+            if (seenSet.Add(pName))
+                seenParams.AddLast(pName);
+        }
+
+        // Build NpgsqlParameters — one per unique placeholder
+        var parameters = seenParams.Select(pName =>
+        {
+            queryParams.TryGetValue(pName, out var sv);
+            var value = string.IsNullOrWhiteSpace(sv)
+                ? (object)DBNull.Value
+                : sv.ToString()!;
+            return new NpgsqlParameter(pName, value);
+        }).ToList();
+
+        // Npgsql understands both :name and @name; we leave the SQL as-is
+        // (Npgsql resolves :param_name → NpgsqlParameter named "param_name")
+        var countSql = $"SELECT COUNT(*) FROM ({rawSql}) _cnt";
+        var dataSql  = $"SELECT * FROM ({rawSql}) _data LIMIT {pageSize} OFFSET {(page - 1) * pageSize}";
+
+        _logger.LogDebug("Raw SQL report — count: {Sql}", countSql);
+        _logger.LogDebug("Raw SQL report — data:  {Sql}", dataSql);
+
+        await using var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+        if (conn.State != ConnectionState.Open)
+            await conn.OpenAsync();
+
+        // Count
+        long totalCount = 0;
+        await using (var countCmd = conn.CreateCommand())
+        {
+            countCmd.CommandText = countSql;
+            AddParameters(countCmd, parameters);
+            var scalar = await countCmd.ExecuteScalarAsync();
+            totalCount = scalar is not null ? Convert.ToInt64(scalar) : 0;
+        }
+
+        // Data
+        var columns = new List<string>();
+        var rows    = new List<Dictionary<string, object?>>();
 
         await using (var dataCmd = conn.CreateCommand())
         {
@@ -166,8 +273,10 @@ public class ReportService
         ReportConfig config,
         IQueryCollection queryParams)
     {
+        // Tables/Select are guaranteed non-null here because DeserializeConfig validates,
+        // and RunReportAsync routes rawSql configs to RunRawSqlAsync before reaching here.
         if (config.Tables == null || config.Tables.Count == 0)
-            throw new InvalidOperationException("Report config must have at least one table.");
+            throw new InvalidOperationException("Visual builder report must have at least one table.");
 
         // Collect registered table names for validation
         var registeredTables = await _db.SheetTableMappings
@@ -192,7 +301,7 @@ public class ReportService
 
         // SELECT
         var selectParts = new List<string>();
-        if (config.Select == null || config.Select.Count == 0)
+        if (config.Select is not { Count: > 0 })
         {
             selectParts.Add("*");
         }
@@ -279,12 +388,12 @@ public class ReportService
         return (sb.ToString(), parameters);
     }
 
-    private static string BuildOrderBy(List<ROrderBy>? orderBy, List<RTable> tables)
+    private static string BuildOrderBy(List<ROrderBy>? orderBy, List<RTable>? tables)
     {
         if (orderBy == null || orderBy.Count == 0)
             return string.Empty;
 
-        var aliasMap = tables.ToDictionary(t => t.Alias, t => t.TableName, StringComparer.OrdinalIgnoreCase);
+        var aliasMap = (tables ?? []).ToDictionary(t => t.Alias, t => t.TableName, StringComparer.OrdinalIgnoreCase);
         var parts = new List<string>();
 
         foreach (var o in orderBy)
@@ -338,6 +447,12 @@ public class ReportService
 
         var cfg = JsonSerializer.Deserialize<ReportConfig>(configJson, JsonOpts)
             ?? throw new InvalidOperationException("Failed to deserialize report config.");
+
+        // Either rawSql or at least one table must be present
+        if (string.IsNullOrWhiteSpace(cfg.RawSql) &&
+            (cfg.Tables == null || cfg.Tables.Count == 0))
+            throw new InvalidOperationException(
+                "Report config must have either RawSql or at least one table.");
 
         return cfg;
     }

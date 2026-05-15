@@ -114,13 +114,17 @@ export interface ROrderBy { ref: string; agg?: string; desc: boolean }
 export interface RChart  { type: string; xField: string; yFields: string[] }
 
 export interface ReportConfig {
-  tables: RTable[]
+  // Visual builder mode
+  tables?: RTable[]
   joins?: RJoin[]
-  select: RSelect[]
+  select?: RSelect[]
   groupBy?: string[]
-  filters?: RFilter[]
   orderBy?: ROrderBy[]
+  // Shared
+  filters?: RFilter[]
   chart?: RChart
+  // Raw SQL mode (when set, visual builder fields are ignored)
+  rawSql?: string
 }
 
 export interface ReportListItem {

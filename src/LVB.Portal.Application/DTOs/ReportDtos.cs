@@ -6,17 +6,28 @@ namespace LVB.Portal.Application.DTOs;
 
 /// <summary>
 /// Top-level report configuration stored as JSON inside Report.ConfigJson.
-/// All identifier strings (TableName, Ref, …) are validated server-side before
-/// being used in SQL, so the builder on the client can store raw column names.
+///
+/// Two modes are supported:
+///   • <b>Visual Builder</b>: Tables + Select are required; Joins/GroupBy/OrderBy optional.
+///   • <b>Raw SQL</b>: RawSql is set; Tables/Select are ignored. Filter params are still
+///     used for the UI input fields; their values are injected into SQL via :param_name.
+///
+/// All identifier strings in Visual mode are validated server-side before SQL use.
 /// </summary>
 public record ReportConfig(
-    List<RTable> Tables,
+    List<RTable>? Tables,
     List<RJoin>? Joins,
-    List<RSelect> Select,
+    List<RSelect>? Select,
     List<string>? GroupBy,
     List<RFilter>? Filters,
     List<ROrderBy>? OrderBy,
-    RChart? Chart
+    RChart? Chart,
+    /// <summary>
+    /// Raw PostgreSQL SQL. When non-empty the visual builder fields are ignored.
+    /// Use :param_name placeholders for dynamic values (e.g. WHERE date BETWEEN :from_date AND :to_date).
+    /// The query is wrapped as SELECT * FROM (...) _data LIMIT ? OFFSET ? for pagination.
+    /// </summary>
+    string? RawSql = null
 );
 
 /// <summary>A table included in the FROM clause, identified by an alias.</summary>
