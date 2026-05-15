@@ -164,7 +164,7 @@ export default function ReportBuilderPage() {
     if (!tableName || tableColumns[tableName]) return
     try {
       const res = await dataApi.getTableColumns(tableName)
-      setTableColumns(prev => ({ ...prev, [tableName]: res.data.columns ?? [] }))
+      setTableColumns(prev => ({ ...prev, [tableName]: res.data ?? [] }))
     } catch { /* ignore */ }
   }
 
