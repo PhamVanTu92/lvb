@@ -53,7 +53,7 @@ function ReportChart({
       <YAxis tick={{ fontSize: 11 }} width={70}
         tickFormatter={v => typeof v === 'number' && v >= 1_000_000
           ? `${(v / 1_000_000).toFixed(1)}M` : String(v)} />
-      <Tooltip formatter={(v: number) => v.toLocaleString('vi-VN')} />
+      <Tooltip formatter={(v) => typeof v === 'number' ? v.toLocaleString('vi-VN') : String(v ?? '')} />
       <Legend />
       {config.yFields.map((f, i) => (
         <Line key={f} type="monotone" dataKey={f} stroke={COLORS[i % COLORS.length]}
@@ -67,7 +67,7 @@ function ReportChart({
       <YAxis tick={{ fontSize: 11 }} width={70}
         tickFormatter={v => typeof v === 'number' && v >= 1_000_000
           ? `${(v / 1_000_000).toFixed(1)}M` : String(v)} />
-      <Tooltip formatter={(v: number) => v.toLocaleString('vi-VN')} />
+      <Tooltip formatter={(v) => typeof v === 'number' ? v.toLocaleString('vi-VN') : String(v ?? '')} />
       <Legend />
       {config.yFields.map((f, i) => (
         <Bar key={f} dataKey={f} fill={COLORS[i % COLORS.length]} radius={[3, 3, 0, 0]} />
