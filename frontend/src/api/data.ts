@@ -1,5 +1,5 @@
 import api from './client'
-import type { AuditLog, BatchListResult, DatasetField, DataTableResult, Department, PagedResult, ReportListItem, ReportDetail, ReportRunResult } from '../types'
+import type { AuditLog, BatchListResult, DatasetField, DataTableResult, Department, PagedResult, ReportListItem, ReportDetail, ReportRunResult, SqlScriptListItem, SqlScriptDetail, ScriptRunResult } from '../types'
 
 export const dataApi = {
   getDepartments: () => api.get<Department[]>('/departments'),
@@ -83,4 +83,26 @@ export const dataApi = {
 
   getTableColumns: (tableName: string) =>
     api.get<string[]>(`/admin/tables/${tableName}/columns`),
+
+  // ── SQL Scripts ─────────────────────────────────────────────────────────────
+  getScripts: () =>
+    api.get<SqlScriptListItem[]>('/admin/scripts'),
+
+  getScript: (id: string) =>
+    api.get<SqlScriptDetail>(`/admin/scripts/${id}`),
+
+  createScript: (data: { name: string; description?: string; scriptSql: string; paramsJson?: string; orderIndex?: number }) =>
+    api.post<SqlScriptDetail>('/admin/scripts', data),
+
+  updateScript: (id: string, data: { name?: string; description?: string; scriptSql?: string; paramsJson?: string; isActive?: boolean; orderIndex?: number }) =>
+    api.put(`/admin/scripts/${id}`, data),
+
+  deleteScript: (id: string) =>
+    api.delete(`/admin/scripts/${id}`),
+
+  runScript: (id: string, params: Record<string, string>) =>
+    api.post<ScriptRunResult>(`/admin/scripts/${id}/run`, { params }),
+
+  runAdhocScript: (scriptSql: string, params: Record<string, string>) =>
+    api.post<ScriptRunResult>('/admin/scripts/run-adhoc', { scriptSql, params }),
 }

@@ -108,6 +108,7 @@ builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<ExcelImportJob>();
 builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<ScriptService>();
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 builder.Services.AddCors(opts =>
@@ -424,6 +425,22 @@ static async Task EnsureSchemaAsync(AppDbContext db)
         );
         CREATE INDEX IF NOT EXISTS idx_reports_dept   ON reports(department_code);
         CREATE INDEX IF NOT EXISTS idx_reports_active ON reports(is_active);
+
+        -- SQL Script runner
+        CREATE TABLE IF NOT EXISTS sql_scripts (
+            id               UUID        PRIMARY KEY,
+            name             TEXT        NOT NULL,
+            description      TEXT,
+            script_sql       TEXT        NOT NULL DEFAULT '',
+            params_json      TEXT        NOT NULL DEFAULT '[]',
+            created_by       UUID,
+            created_by_name  TEXT,
+            created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            is_active        BOOLEAN     NOT NULL DEFAULT TRUE,
+            order_index      INT         NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_scripts_active ON sql_scripts(is_active);
 
         -- Indexes
         CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users(username);

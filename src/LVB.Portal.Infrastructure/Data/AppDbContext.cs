@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<DatasetField> DatasetFields => Set<DatasetField>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Report> Reports => Set<Report>();
+    public DbSet<SqlScript> SqlScripts => Set<SqlScript>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -104,6 +105,17 @@ public class AppDbContext : DbContext
                 .WithMany(m => m.Fields)
                 .HasForeignKey(f => f.MappingId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SqlScript
+        modelBuilder.Entity<SqlScript>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Name).HasMaxLength(300).IsRequired();
+            e.Property(s => s.ScriptSql).HasColumnType("text").IsRequired();
+            e.Property(s => s.ParamsJson).HasColumnType("text").IsRequired();
+            e.Property(s => s.CreatedByName).HasMaxLength(200);
+            e.HasIndex(s => s.IsActive);
         });
 
         // Report

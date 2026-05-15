@@ -28,7 +28,10 @@
       "Bash(git -C \"E:/Project/LAOVIETBANK\" add frontend/src/pages/DataTable/UploadModal.tsx frontend/src/pages/DataTable/DataTablePage.tsx)",
       "Bash(git -C \"E:/Project/LAOVIETBANK\" add frontend/nginx.conf nginx-proxy/lvb.foxai.com.vn.conf)",
       "Bash(npm install *)",
-      "Bash(git -C \"E:/Project/LAOVIETBANK\" add -A)"
+      "Bash(git -C \"E:/Project/LAOVIETBANK\" add -A)",
+      "Bash(git -C \"E:/Project/LAOVIETBANK\" add frontend/nginx.conf docker-compose.yml)",
+      "Bash(git -C \"E:/Project/LAOVIETBANK\" add src/LVB.Portal.API/Program.cs)",
+      "Bash(git -C E:/Project/LAOVIETBANK commit -m 'fix\\(migration\\): escape '\\\\''{}'\\\\'' as '\\\\''{{}}'\\\\'' in EnsureSchemaAsync SQL *)"
     ]
   }
 }

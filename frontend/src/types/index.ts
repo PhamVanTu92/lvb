@@ -144,6 +144,33 @@ export interface ReportRunResult {
   pageSize: number
 }
 
+// ── SQL Script ────────────────────────────────────────────────────────────────
+export interface ScriptParam {
+  paramName: string
+  displayName: string
+  paramType: string
+}
+
+export interface SqlScriptListItem {
+  id: string; name: string; description?: string
+  isActive: boolean; orderIndex: number; createdByName?: string; updatedAt: string
+}
+
+export interface SqlScriptDetail extends SqlScriptListItem {
+  scriptSql: string
+  paramsJson: string
+  createdAt: string
+}
+
+export interface ScriptRunResult {
+  success: boolean
+  rowsAffected: number
+  error?: string
+  durationMs: number
+  columns?: string[]
+  rows?: Record<string, unknown>[]
+}
+
 export interface DatasetField {
   id: string
   mappingId: string
