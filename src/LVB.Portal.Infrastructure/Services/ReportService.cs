@@ -161,7 +161,9 @@ public class ReportService
         int page,
         int pageSize)
     {
-        var rawSql = config.RawSql!.Trim();
+        // Strip trailing semicolons — the SQL will be wrapped inside a subquery
+        // so any trailing ";" breaks the outer SELECT COUNT(*) FROM (...) syntax.
+        var rawSql = config.RawSql!.Trim().TrimEnd(';', ' ', '\t', '\r', '\n').Trim();
 
         // Collect distinct :param_name placeholders (preserve first-appearance order)
         var seenParams = new LinkedList<string>(); // ordered, unique
