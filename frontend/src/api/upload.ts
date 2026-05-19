@@ -21,6 +21,9 @@ export const uploadApi = {
   getStatus: (sessionId: string) =>
     api.get<UploadSession>(`/upload/${sessionId}/status`),
 
+  getStats: () =>
+    api.get<{ total: number; success: number; failed: number; pending: number }>('/upload/stats'),
+
   getHistory: (page = 1, pageSize = 20) =>
     api.get<PagedResult<UploadSession>>('/upload/history', { params: { page, pageSize } }),
 

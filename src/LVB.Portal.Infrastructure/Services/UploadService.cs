@@ -131,6 +131,26 @@ public class UploadService
             total, page, pageSize);
     }
 
+    public async Task<object> GetStatsAsync(string deptCode, bool isAdmin)
+    {
+        var query = _db.UploadSessions.AsQueryable();
+        if (!isAdmin)
+            query = query.Where(s => s.DepartmentCode == deptCode);
+
+        var counts = await query
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                Total   = g.Count(),
+                Success = g.Count(s => s.Status == UploadStatus.Success),
+                Failed  = g.Count(s => s.Status == UploadStatus.Failed),
+                Pending = g.Count(s => s.Status == UploadStatus.Pending || s.Status == UploadStatus.Processing),
+            })
+            .FirstOrDefaultAsync();
+
+        return counts ?? new { Total = 0, Success = 0, Failed = 0, Pending = 0 };
+    }
+
     public async Task<Stream?> DownloadOriginalAsync(Guid sessionId, string deptCode, bool isAdmin)
     {
         var session = await _db.UploadSessions.FindAsync(sessionId);

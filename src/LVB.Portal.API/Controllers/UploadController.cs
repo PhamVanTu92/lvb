@@ -53,6 +53,14 @@ public class UploadController : ControllerBase
         return Ok(session);
     }
 
+    /// <summary>Thống kê upload (dùng cho dashboard)</summary>
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetStats()
+    {
+        var stats = await _uploadService.GetStatsAsync(GetCurrentDeptCode(), IsAdmin());
+        return Ok(stats);
+    }
+
     /// <summary>Lịch sử upload</summary>
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
