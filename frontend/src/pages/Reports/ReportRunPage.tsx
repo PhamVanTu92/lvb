@@ -94,6 +94,7 @@ function CurlModal({ id, reportName, filters, runParams, pageSize, onClose }: {
   pageSize: number
   onClose: () => void
 }) {
+  const navigate = useNavigate()
   const [copied, setCopied] = useState<string | null>(null)
 
   const baseUrl = `${window.location.origin}/api/v1/reports/${id}/run`
@@ -239,8 +240,12 @@ data = r.json()
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
             <span className="shrink-0 font-bold">⚠</span>
             <span>
-              Thay <code className="font-mono bg-amber-100 px-1 rounded">YOUR_API_KEY</code> bằng API Key thật.
-              Tạo key tại <strong>Quản trị → API Keys (iTitan)</strong>.
+              Thay <code className="font-mono bg-amber-100 px-1 rounded">YOUR_API_KEY</code> bằng API Key thật.{' '}
+              <button
+                onClick={() => { onClose(); navigate('/admin/api-keys') }}
+                className="underline font-semibold hover:text-amber-900 transition-colors">
+                Tạo API Key tại đây →
+              </button>
             </span>
           </div>
         </div>
