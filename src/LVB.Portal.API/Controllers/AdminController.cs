@@ -305,6 +305,39 @@ public class AdminController : ControllerBase
             k.Id, k.Name, k.Description, k.IsActive, k.CreatedAt, k.ExpiresAt, k.LastUsedAt
         }).ToListAsync());
 
+    /// <summary>Vô hiệu hóa API key</summary>
+    [HttpPatch("api-keys/{id:guid}/revoke")]
+    public async Task<IActionResult> RevokeApiKey(Guid id)
+    {
+        var key = await _db.ApiKeys.FindAsync(id);
+        if (key is null) return NotFound();
+        key.IsActive = false;
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "API key đã bị vô hiệu hóa." });
+    }
+
+    /// <summary>Kích hoạt lại API key</summary>
+    [HttpPatch("api-keys/{id:guid}/activate")]
+    public async Task<IActionResult> ActivateApiKey(Guid id)
+    {
+        var key = await _db.ApiKeys.FindAsync(id);
+        if (key is null) return NotFound();
+        key.IsActive = true;
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "API key đã được kích hoạt." });
+    }
+
+    /// <summary>Xóa vĩnh viễn API key</summary>
+    [HttpDelete("api-keys/{id:guid}")]
+    public async Task<IActionResult> DeleteApiKey(Guid id)
+    {
+        var key = await _db.ApiKeys.FindAsync(id);
+        if (key is null) return NotFound();
+        _db.ApiKeys.Remove(key);
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "API key đã bị xóa vĩnh viễn." });
+    }
+
     /// <summary>Danh sách fields của một dataset</summary>
     [HttpGet("dataset-fields/{mappingId:guid}")]
     public async Task<IActionResult> GetDatasetFields(Guid mappingId)
