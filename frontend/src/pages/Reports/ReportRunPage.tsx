@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import type { ReportConfig, RFilter } from '../../types'
 import {
   ArrowLeft, Play, Download, ChevronLeft, ChevronRight,
-  BarChart2, Pencil, RefreshCw,
+  BarChart2, Pencil, RefreshCw, Terminal, Copy, CheckCircle, X,
 } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line,
@@ -85,6 +85,170 @@ function ReportChart({
   )
 }
 
+// ── cURL export modal ─────────────────────────────────────────────────────────
+function CurlModal({ id, reportName, filters, runParams, pageSize, onClose }: {
+  id: string
+  reportName: string
+  filters: RFilter[]
+  runParams: Record<string, string>
+  pageSize: number
+  onClose: () => void
+}) {
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const baseUrl = `${window.location.origin}/api/v1/reports/${id}/run`
+
+  // Build query string with current param values (or placeholder)
+  const buildQs = (paramVals: Record<string, string>, pg = 1) => {
+    const p = new URLSearchParams()
+    filters.forEach(f => {
+      const v = paramVals[f.paramName]
+      p.set(f.paramName, v || `{${f.paramName}}`)
+    })
+    p.set('page', String(pg))
+    p.set('pageSize', String(pageSize))
+    return p.toString()
+  }
+
+  const fullUrl = `${baseUrl}?${buildQs(runParams)}`
+
+  const curlCmd = `curl "${fullUrl}" \\
+  -H "X-Api-Key: YOUR_API_KEY" \\
+  -H "Accept: application/json"`
+
+  const jsCode = `const res = await fetch(
+  "${fullUrl}",
+  { headers: { "X-Api-Key": "YOUR_API_KEY" } }
+);
+const data = await res.json();
+// data.columns — tên cột
+// data.rows    — mảng dữ liệu
+// data.totalCount — tổng số bản ghi`
+
+  const pyCode = `import requests
+
+r = requests.get(
+    "${fullUrl}",
+    headers={"X-Api-Key": "YOUR_API_KEY"}
+)
+data = r.json()
+# data["columns"], data["rows"], data["totalCount"]`
+
+  const copy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(key)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  const [tab, setTab] = useState<'curl' | 'js' | 'python'>('curl')
+  const codeMap = { curl: curlCmd, js: jsCode, python: pyCode }
+  const currentCode = codeMap[tab]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+          <Terminal size={18} className="text-blue-600" />
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-gray-900 text-sm">Tích hợp API</h2>
+            <p className="text-xs text-gray-400 truncate">{reportName}</p>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700 rounded">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Endpoint info */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Endpoint</p>
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+              <span className="text-xs font-mono bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">GET</span>
+              <code className="text-xs font-mono text-gray-700 flex-1 truncate">{baseUrl}</code>
+              <button onClick={() => copy(baseUrl, 'url')}
+                className="text-gray-400 hover:text-blue-600 shrink-0">
+                {copied === 'url' ? <CheckCircle size={13} className="text-green-500" /> : <Copy size={13} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Params table */}
+          {filters.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Tham số</p>
+              <table className="w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Tên</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Kiểu</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Giá trị hiện tại</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filters.map(f => (
+                    <tr key={f.paramName}>
+                      <td className="px-3 py-1.5 font-mono text-blue-700">{f.paramName}</td>
+                      <td className="px-3 py-1.5 text-gray-500">{f.paramType}</td>
+                      <td className="px-3 py-1.5 font-mono text-green-700">
+                        {runParams[f.paramName] || <span className="text-gray-300 italic">chưa nhập</span>}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-gray-50">
+                    <td className="px-3 py-1.5 font-mono text-blue-700">page</td>
+                    <td className="px-3 py-1.5 text-gray-500">number</td>
+                    <td className="px-3 py-1.5 font-mono text-green-700">1, 2, 3... (mặc định: 1)</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="px-3 py-1.5 font-mono text-blue-700">pageSize</td>
+                    <td className="px-3 py-1.5 text-gray-500">number</td>
+                    <td className="px-3 py-1.5 font-mono text-green-700">tối đa 1000 (mặc định: 50)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Code tabs */}
+          <div>
+            <div className="flex gap-1 mb-2">
+              {(['curl', 'js', 'python'] as const).map(t => (
+                <button key={t} type="button"
+                  onClick={() => setTab(t)}
+                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                    tab === t ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+                  }`}>
+                  {t === 'curl' ? 'cURL' : t === 'js' ? 'JavaScript' : 'Python'}
+                </button>
+              ))}
+              <button onClick={() => copy(currentCode, 'code')}
+                className="ml-auto flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 px-2 py-1 rounded hover:bg-blue-50">
+                {copied === 'code'
+                  ? <><CheckCircle size={12} className="text-green-500" /> Đã sao chép</>
+                  : <><Copy size={12} /> Sao chép</>}
+              </button>
+            </div>
+            <pre className="bg-gray-950 text-gray-100 rounded-xl p-4 text-xs font-mono overflow-x-auto leading-relaxed whitespace-pre">
+              {currentCode}
+            </pre>
+          </div>
+
+          {/* Auth note */}
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+            <span className="shrink-0 font-bold">⚠</span>
+            <span>
+              Thay <code className="font-mono bg-amber-100 px-1 rounded">YOUR_API_KEY</code> bằng API Key thật.
+              Tạo key tại <strong>Quản trị → API Keys (iTitan)</strong>.
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ReportRunPage() {
   const { id } = useParams<{ id: string }>()
@@ -96,6 +260,7 @@ export default function ReportRunPage() {
   const [page, setPage] = useState(1)
   const [pageSize] = useState(50)
   const [hasRun, setHasRun] = useState(false)
+  const [showCurl, setShowCurl] = useState(false)
 
   const { data: report } = useQuery({
     queryKey: ['report', id],
@@ -156,6 +321,10 @@ export default function ReportRunPage() {
           )}
         </div>
         <div className="flex gap-2 shrink-0">
+          <button onClick={() => setShowCurl(true)}
+            className="btn-secondary flex items-center gap-2 text-sm">
+            <Terminal size={14} /> Xuất cURL
+          </button>
           {isAdmin && (
             <button onClick={() => navigate(`/reports/builder/${id}`)}
               className="btn-secondary flex items-center gap-2 text-sm">
@@ -300,6 +469,18 @@ export default function ReportRunPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* cURL export modal */}
+      {showCurl && (
+        <CurlModal
+          id={id!}
+          reportName={report?.name ?? ''}
+          filters={filters}
+          runParams={runParams}
+          pageSize={pageSize}
+          onClose={() => setShowCurl(false)}
+        />
       )}
     </div>
   )
